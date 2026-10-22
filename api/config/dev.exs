@@ -23,7 +23,7 @@ config :timbre, TimbreWeb.Endpoint,
   #
   # Port 4010 (not the Phoenix default 4000); the web dev server (Vite, :5173)
   # proxies /api/* here — see web/vite.config.ts.
-  http: [ip: {127, 0, 0, 1}, port: 4010],
+  http: [ip: {0, 0, 0, 0}, port: 4010],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

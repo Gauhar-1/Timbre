@@ -95,8 +95,8 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         }
       }
 
-      // Collect audio chunks every 100ms
-      recorder.start(100)
+      // Start recording without timeslice so Chrome outputs a fully valid, unfragmented WebM container
+      recorder.start()
       setIsRecording(true)
 
       // Recording duration timer

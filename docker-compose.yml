@@ -1,0 +1,20 @@
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: timbre_api
+    ports:
+      - "4010:4010"
+    volumes:
+      - ./api:/app
+      - api_build:/app/_build
+      - api_deps:/app/deps
+    environment:
+      - MIX_ENV=dev
+      - PORT=4010
+    restart: unless-stopped
+
+volumes:
+  api_build:
+  api_deps:

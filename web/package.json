@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.20",
+    "@types/phoenix": "^1.6.8",
+    "phoenix": "^1.8.16",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",

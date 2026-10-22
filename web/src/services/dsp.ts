@@ -94,7 +94,12 @@ export async function processAudio(
   const audioCtx = new AudioContextClass()
 
   try {
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume()
+    }
+
+    // Pass a sliced copy to prevent buffer detachment and compatibility issues in Chrome
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0))
 
     // Extract first channel samples
     const channelData = audioBuffer.getChannelData(0)
