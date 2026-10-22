@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-// The default export loads the .wasm; the named export is our Rust fn.
 import init, { rms_level } from 'timbre_kit'
-// The assignment brief, rendered at /. Lives at the repo root; ?raw inlines it.
-import assignment from '../../ASSIGNMENT.md?raw'
+import { RecorderUI } from './components/RecorderUI'
 
 export default function App() {
   const [wasmOk, setWasmOk] = useState(false)
@@ -32,10 +28,16 @@ export default function App() {
   )
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen bg-canvas text-body">
+      {/* Top navigation / status header */}
       <header className="sticky top-0 z-10 border-b border-hairline bg-canvas/80 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight text-ink">timbre</span>
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-3.5">
+          <div className="flex items-center gap-3">
+            <span className="font-bold tracking-tight text-ink text-lg">timbre</span>
+            <span className="rounded-md border border-hairline px-2 py-0.5 text-[10px] font-medium text-mute uppercase tracking-wider">
+              Studio
+            </span>
+          </div>
           <div className="flex items-center gap-4">
             <Dot ok={wasmOk} label="WASM" />
             <Dot ok={apiOk} label="API" />
@@ -43,12 +45,9 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <article
-          className="prose prose-neutral max-w-none dark:prose-invert prose-headings:text-ink prose-a:text-link prose-code:before:content-none prose-code:after:content-none"
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{assignment}</ReactMarkdown>
-        </article>
+      {/* Main recording studio container */}
+      <main className="mx-auto max-w-4xl px-6 py-12">
+        <RecorderUI />
       </main>
     </div>
   )
