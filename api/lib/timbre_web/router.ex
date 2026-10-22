@@ -15,5 +15,9 @@ defmodule TimbreWeb.Router do
     pipe_through :api
 
     get "/hello", HelloController, :show
+
+    get "/recordings", RecordingController, :index
+    post "/recordings", RecordingController, :create
+    get "/recordings/:id/audio", RecordingController, :show
   end
 end
