@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: timbre-api
+    env: docker
+    dockerContext: ./api
+    dockerfilePath: ./api/Dockerfile
+    plan: free
+    envVars:
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      - key: MIX_ENV
+        value: prod
+      - key: PORT
+        value: 10000
