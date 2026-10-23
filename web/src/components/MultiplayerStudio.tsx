@@ -13,6 +13,7 @@ import {
   Square,
   Sparkles,
   X,
+  Radio,
 } from 'lucide-react'
 import { useWebRTCMixer } from '../hooks/useWebRTCMixer'
 import { AudioWaveform } from './AudioWaveform'
@@ -22,12 +23,12 @@ import {
   setGroqApiKey,
 } from '../services/ai'
 import { MasteringBay } from './mastering/MasteringBay'
-import { copyInviteLink, getUrlRoomId } from '../services/client'
+import { copyInviteLink, getUrlRoomId, setUrlRoomId } from '../services/client'
 
 export interface MultiplayerStudioProps {
   roomId?: string
-  onRecordingFinished?: (blob: Blob, durationMs: number, roomId: string) => void
-  onOpenMastering?: (blob: Blob, durationMs: number, roomId: string) => void
+  onRecordingFinished?: (blob: Blob, durationMs: number, roomId?: string) => void
+  onOpenMastering?: (blob: Blob, durationMs: number, roomId?: string) => void
 }
 
 export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
@@ -35,11 +36,30 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   onRecordingFinished,
   onOpenMastering,
 }) => {
-  // Determine active room ID (normalized for Phoenix channel topic `room:<name>`)
-  const urlRoom = getUrlRoomId()
-  const rawRoom = propRoomId || urlRoom || 'lobby'
-  const activeRoomKey = rawRoom.replace(/^room:/, '')
-  const channelTopic = `room:${activeRoomKey}`
+  // Step 1: Dynamic Room Creation (WebRTC)
+  // Check if user landed with ?room=UUID or received propRoomId
+  const [activeRoomKey, setActiveRoomKey] = useState<string | null>(() => {
+    const urlParam = getUrlRoomId()
+    if (urlParam && urlParam.trim()) {
+      return urlParam.trim().replace(/^room:/, '')
+    }
+    if (propRoomId && propRoomId.trim()) {
+      return propRoomId.trim().replace(/^room:/, '')
+    }
+    return null
+  })
+
+  // Synchronize if URL query or prop changes
+  useEffect(() => {
+    const urlParam = getUrlRoomId()
+    if (urlParam && urlParam.trim()) {
+      setActiveRoomKey(urlParam.trim().replace(/^room:/, ''))
+    } else if (propRoomId && propRoomId.trim()) {
+      setActiveRoomKey(propRoomId.trim().replace(/^room:/, ''))
+    }
+  }, [propRoomId])
+
+  const channelTopic = activeRoomKey ? `room:${activeRoomKey}` : null
 
   const {
     localPeerId,
@@ -89,7 +109,7 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   useEffect(() => {
     if (wasRecordingMixedRef.current && !isRecordingMixed && mixedAudioBlob) {
       if (onRecordingFinished) {
-        onRecordingFinished(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
+        onRecordingFinished(mixedAudioBlob, recordingTime * 1000, activeRoomKey || undefined)
       } else {
         setIsMasteringOpen(true)
       }
@@ -100,7 +120,7 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   const handleOpenMastering = () => {
     if (!mixedAudioBlob) return
     if (onOpenMastering) {
-      onOpenMastering(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
+      onOpenMastering(mixedAudioBlob, recordingTime * 1000, activeRoomKey || undefined)
     } else {
       setIsMasteringOpen(true)
     }
@@ -112,7 +132,23 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
     setGroqApiKey(trimmed)
   }
 
+  // Step 1: Dynamic Room Creation handlers
+  const handleCreateRoom = () => {
+    const newRoomUuid =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `room-${Math.random().toString(36).substring(2, 9)}`
+    setUrlRoomId(newRoomUuid)
+    setActiveRoomKey(newRoomUuid)
+  }
+
+  const handleLeaveRoom = () => {
+    setUrlRoomId(null)
+    setActiveRoomKey(null)
+  }
+
   const handleCopyInvite = async () => {
+    if (!activeRoomKey) return
     const ok = await copyInviteLink(activeRoomKey)
     if (ok) {
       setCopiedInvite(true)
@@ -135,6 +171,44 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
+
+  // Step 1: If no room is specified in URL, show "Create New Room" button by default
+  if (!activeRoomKey) {
+    return (
+      <div className="w-full max-w-xl mx-auto flex flex-col items-center justify-center py-16 px-4 text-center select-none">
+        <div className="relative mb-6">
+          <div className="absolute -inset-2 rounded-3xl bg-violet-600/20 blur-xl animate-pulse" />
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-900 border border-violet-500/30 text-violet-400 shadow-2xl">
+            <Radio className="h-10 w-10 animate-pulse text-violet-400" />
+          </div>
+        </div>
+
+        <h2 className="text-2xl font-bold tracking-tight text-zinc-100 sm:text-3xl">
+          Multiplayer Live Mixer
+        </h2>
+        <p className="mt-2 text-xs sm:text-sm text-zinc-400 max-w-md mx-auto leading-relaxed">
+          Real-time WebRTC audio mesh with multi-channel browser mixing and master take recording. Create a dedicated room to collaborate live.
+        </p>
+
+        <div className="mt-8 flex flex-col items-center justify-center gap-3 w-full max-w-xs">
+          <button
+            type="button"
+            id="btn-create-room"
+            onClick={handleCreateRoom}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-3.5 text-sm font-semibold text-white shadow-xl shadow-violet-600/30 hover:bg-violet-500 active:scale-95 transition-all cursor-pointer"
+          >
+            <Radio className="h-4 w-4" />
+            <span>Create New Room</span>
+          </button>
+        </div>
+
+        <div className="mt-6 flex items-center gap-2 text-xs text-zinc-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+          <span>Generates secure room UUID with instant invite link</span>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -213,6 +287,17 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
                   <span>Copy Invite Link</span>
                 </>
               )}
+            </button>
+
+            {/* Leave Room Button */}
+            <button
+              type="button"
+              id="btn-leave-room"
+              onClick={handleLeaveRoom}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-all cursor-pointer shadow-sm"
+              title="Leave Room"
+            >
+              <span>Leave Room</span>
             </button>
 
             {/* Step 4: Groq API Key Input Animation */}

@@ -3,6 +3,7 @@ import { Archive } from 'lucide-react'
 export interface StudioLayoutProps {
   children: React.ReactNode
   sidebar?: React.ReactNode
+  mobileDrawer?: React.ReactNode
   isConnected?: boolean
   connectedLabel?: string
   title?: string
@@ -15,6 +16,7 @@ export interface StudioLayoutProps {
 export const StudioLayout: React.FC<StudioLayoutProps> = ({
   children,
   sidebar,
+  mobileDrawer,
   isConnected = true,
   connectedLabel = 'Connected',
   title = 'timbre',
@@ -43,9 +45,9 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
         </aside>
 
         {/* Right Pane: Main Studio Workspace & Header */}
-        <div className="flex flex-col h-full overflow-hidden min-w-0 relative z-10">
-        {/* Top Navbar: Responsive mobile wrap and scaling header */}
-        <header className="relative z-20 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 p-4 border-b border-zinc-800/60 bg-[#09090b]/80 backdrop-blur-md shrink-0">
+        <div className="flex flex-col h-full overflow-hidden min-w-0 relative">
+        {/* Step 2: Top Navbar with z-40 stacking context */}
+        <header className="relative z-40 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 p-4 border-b border-zinc-800/60 bg-[#09090b]/80 backdrop-blur-md shrink-0">
           {/* Left: Mobile Vault Toggle Button & Project Branding */}
           <div className="flex items-center gap-2.5 sm:gap-3">
             {/* Mobile Vault drawer button */}
@@ -116,6 +118,9 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
         </main>
       </div>
     </div>
+
+    {/* Step 2: Mobile Drawer with z-50 stacking context to completely cover z-40 header */}
+    {mobileDrawer}
   </div>
 )
 }

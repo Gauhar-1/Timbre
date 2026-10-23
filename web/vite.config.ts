@@ -15,7 +15,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  build: { target: 'esnext' },
+  build: {
+    target: 'esnext',
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+  },
+  // Vitest configuration for automated UI tests
+  // @ts-expect-error vitest config extension
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/__tests__/setup.ts'],
+  },
   server: {
     port: 5173,
     // Allow importing ASSIGNMENT.md from the repo root (one level above web/).

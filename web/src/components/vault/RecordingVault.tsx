@@ -402,15 +402,15 @@ export const RecordingVault: React.FC<RecordingVaultProps> = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={onClose}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm"
             />
-            <div className="fixed inset-y-0 left-0 max-w-full flex">
+            <div className="fixed inset-y-0 left-0 max-w-full flex z-50">
               <motion.aside
                 initial={{ x: '-100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                className="w-80 max-w-xs shadow-2xl h-full"
+                className="w-80 max-w-xs shadow-2xl h-full relative z-50"
               >
                 {vaultContent}
               </motion.aside>

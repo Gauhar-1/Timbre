@@ -79,7 +79,7 @@ export default function App() {
   }, [])
 
   const handleMultiRecordingFinished = useCallback(
-    (blob: Blob, durationMs: number, activeRoom: string) => {
+    (blob: Blob, durationMs: number, activeRoom?: string) => {
       setMasteringSession({
         blob,
         recordingType: 'merged',
@@ -161,6 +161,15 @@ export default function App() {
           onCountChange={setVaultCount}
         />
       }
+      mobileDrawer={
+        <RecordingVault
+          isMobileDrawer={true}
+          isOpen={isMobileVaultOpen}
+          onClose={() => setIsMobileVaultOpen(false)}
+          refreshTrigger={vaultRefreshKey}
+          onCountChange={setVaultCount}
+        />
+      }
     >
       {/* Studio Content centered within the Center Stage */}
       <div className="w-full flex flex-col items-center justify-start">
@@ -206,15 +215,6 @@ export default function App() {
           // Trigger instant refresh of isolated sidebar vault
           setVaultRefreshKey((prev) => prev + 1)
         }}
-      />
-
-      {/* Mobile-Only Recording Vault Overlay Drawer */}
-      <RecordingVault
-        isMobileDrawer={true}
-        isOpen={isMobileVaultOpen}
-        onClose={() => setIsMobileVaultOpen(false)}
-        refreshTrigger={vaultRefreshKey}
-        onCountChange={setVaultCount}
       />
     </StudioLayout>
   )

@@ -31,7 +31,7 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 }
 
-export function useWebRTCMixer(roomId = 'room:lobby'): UseWebRTCMixerReturn {
+export function useWebRTCMixer(roomId?: string | null): UseWebRTCMixerReturn {
   const [localPeerId] = useState<string>(
     () => `peer-${Math.random().toString(36).substring(2, 8)}`
   )
@@ -161,6 +161,14 @@ export function useWebRTCMixer(roomId = 'room:lobby'): UseWebRTCMixerReturn {
 
   // Establish Phoenix Channel & WebRTC Mesh
   useEffect(() => {
+    if (!roomId || !roomId.trim()) {
+      setIsRoomConnected(false)
+      setConnectedPeers([])
+      setRemoteStreams([])
+      setLocalStream(null)
+      return
+    }
+
     let isCancelled = false
 
     const setupSession = async () => {
