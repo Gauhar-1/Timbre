@@ -21,15 +21,17 @@ RUN mix deps.compile
 COPY config config
 COPY lib lib
 COPY priv priv
+COPY rel rel
 
 # Compile app and generate release bundle in MIX_ENV=prod
 RUN mix compile
 RUN mix release
 
-# Production runner stage
+# Production runner stage (pinned to exact builder Alpine release 3.23.5)
 FROM alpine:3.23.5 AS runner
 
-RUN apk add --no-cache openssl libgcc libstdc++ ncurses-libs
+RUN apk add --no-cache openssl libgcc libstdc++ ncurses-libs && \
+    mkdir -p /data
 
 WORKDIR /app
 
@@ -38,7 +40,8 @@ ENV PORT=4010
 ENV PHX_SERVER=true
 
 COPY --from=builder /app/_build/prod/rel/timbre ./
+RUN chmod +x bin/*
 
 EXPOSE 4010
 
-CMD ["bin/timbre", "start"]
+CMD ["sh", "-c", "bin/migrate && bin/server"]
