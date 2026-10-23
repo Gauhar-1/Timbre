@@ -1,5 +1,12 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { useWebRTCMixer } from '../hooks/useWebRTCMixer'
+import {
+  transcribeAudio,
+  summarizeText,
+  saveRecordingToDatabase,
+  getGroqApiKey,
+  setGroqApiKey,
+} from '../services/ai'
 
 // Sub-component to manage each remote audio stream playback safely
 const RemoteStreamPlayer: React.FC<{ stream: MediaStream; index: number }> = ({ stream, index }) => {
@@ -79,8 +86,73 @@ export const MultiplayerStudio: React.FC = () => {
     error,
     startMixedRecording,
     stopMixedRecording,
-    resetMixedRecording,
+    resetMixedRecording: resetBaseRecording,
   } = useWebRTCMixer('room:lobby')
+
+  // AI Pipeline & Persistence states
+  const [isSaving, setIsSaving] = useState(false)
+  const [savingStatus, setSavingStatus] = useState<string>('')
+  const [transcript, setTranscript] = useState<string | null>(null)
+  const [summary, setSummary] = useState<string | null>(null)
+  const [savedRecordId, setSavedRecordId] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // API Key management
+  const [groqKey, setGroqKey] = useState<string>(() => getGroqApiKey())
+  const [showKeyConfig, setShowKeyConfig] = useState(false)
+
+  const handleKeySave = (val: string) => {
+    setGroqKey(val)
+    setGroqApiKey(val)
+    setShowKeyConfig(false)
+  }
+
+  const handleReset = () => {
+    setTranscript(null)
+    setSummary(null)
+    setSavedRecordId(null)
+    setSaveError(null)
+    resetBaseRecording()
+  }
+
+  // Step 4: Transcribe, Summarize, and Save to Phoenix API
+  const handleSaveAndTranscribe = async () => {
+    if (!mixedAudioBlob) return
+
+    try {
+      setIsSaving(true)
+      setSaveError(null)
+
+      // 1. Transcribe mixed audio using Whisper-large-v3
+      setSavingStatus('Transcribing mixed audio (Whisper-large-v3)...')
+      const transcribedText = await transcribeAudio(mixedAudioBlob, groqKey)
+      setTranscript(transcribedText)
+
+      // 2. Generate 2-sentence summary using openai/gpt-oss-20b
+      setSavingStatus('Generating 2-sentence summary (GPT-OSS-20B)...')
+      const summaryText = await summarizeText(transcribedText, groqKey)
+      setSummary(summaryText)
+
+      // 3. Save to Phoenix API /api/recordings
+      setSavingStatus('Saving to Phoenix SQLite database...')
+      const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const record = await saveRecordingToDatabase({
+        audioBlob: mixedAudioBlob,
+        title: `Multiplayer Session (${timestampStr})`,
+        durationMs: recordingTime * 1000,
+        transcript: transcribedText,
+        summary: summaryText,
+      })
+
+      setSavedRecordId(record.id)
+      setSavingStatus('')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Transcription/saving failed'
+      setSaveError(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -112,7 +184,7 @@ export const MultiplayerStudio: React.FC = () => {
         <div className="relative flex flex-col items-center text-center">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-mute">
-              Part 3 • Real-Time WebRTC
+              Part 3 • WebRTC & AI Intelligence
             </span>
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -133,14 +205,56 @@ export const MultiplayerStudio: React.FC = () => {
             Multiplayer Audio Mixer
           </h2>
           <p className="mt-1.5 text-sm text-mute">
-            Join from multiple devices or tabs — all microphones are merged into a single mixed recording.
+            Mix multiple voices live, transcribe with Whisper, and summarize with GPT-OSS-20B.
           </p>
+
+          {/* Quick API Key Toggle */}
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowKeyConfig((p) => !p)}
+              className="text-[11px] text-mute hover:text-ink underline cursor-pointer"
+            >
+              {groqKey ? '🔑 Groq API Key Configured' : '⚙️ Configure Groq API Key (Optional)'}
+            </button>
+          </div>
         </div>
 
+        {/* Collapsible API Key Config Form */}
+        {showKeyConfig && (
+          <div className="mt-4 rounded-xl border border-hairline bg-canvas p-4 text-left transition-all">
+            <label className="block text-xs font-semibold text-ink mb-1">
+              Groq API Key (for Whisper-large-v3 & GPT-OSS-20B)
+            </label>
+            <p className="text-[11px] text-mute mb-2">
+              Keys are stored locally in your browser. Leave blank to use zero-cost demo simulation.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                placeholder="gsk_..."
+                defaultValue={groqKey}
+                id="groq-key-input"
+                className="flex-1 rounded-lg border border-hairline bg-canvas-soft px-3 py-1.5 text-xs text-ink outline-none focus:border-link font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('groq-key-input') as HTMLInputElement | null
+                  handleKeySave(el?.value || '')
+                }}
+                className="rounded-lg bg-ink text-canvas px-3 py-1.5 text-xs font-semibold hover:bg-ink/90 cursor-pointer"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Error notification */}
-        {error && (
+        {(error || saveError) && (
           <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-center text-xs font-medium text-red-500">
-            {error}
+            {error || saveError}
           </div>
         )}
 
@@ -183,7 +297,7 @@ export const MultiplayerStudio: React.FC = () => {
           </div>
         </div>
 
-        {/* Step 3: Remote Audio Streams Monitor Panel */}
+        {/* Remote Audio Streams Monitor Panel */}
         {remoteStreams.length > 0 && (
           <div className="relative mt-4 space-y-2.5">
             <div className="flex items-center justify-between">
@@ -191,7 +305,7 @@ export const MultiplayerStudio: React.FC = () => {
                 Incoming Audio Streams ({remoteStreams.length})
               </span>
               <span className="text-[10px] text-mute italic">
-                Protected with acoustic feedback limiter (volume &le; 20%)
+                Acoustic feedback limiter active (volume &le; 20%)
               </span>
             </div>
 
@@ -253,16 +367,16 @@ export const MultiplayerStudio: React.FC = () => {
             ) : (
               <span className="text-xs text-mute">
                 {mixedAudioUrl
-                  ? 'Review the combined multiplayer recording below'
+                  ? 'Review playback, transcribe with AI, or save to database below'
                   : 'Click the button above to capture all participants into one recording'}
               </span>
             )}
           </div>
         </div>
 
-        {/* Mixed Session Playback Section */}
+        {/* Mixed Session Playback & AI Action Section */}
         {mixedAudioUrl && (
-          <div className="relative mt-6 rounded-xl border border-hairline bg-canvas p-5 transition-all">
+          <div className="relative mt-6 rounded-xl border border-hairline bg-canvas p-5 transition-all space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold tracking-tight text-ink">
@@ -285,25 +399,95 @@ export const MultiplayerStudio: React.FC = () => {
             <audio
               src={mixedAudioUrl}
               controls
-              className="mt-4 w-full rounded-lg outline-none"
+              className="w-full rounded-lg outline-none"
             />
 
-            <div className="mt-4 flex items-center justify-between pt-2 border-t border-hairline">
-              <a
-                href={mixedAudioUrl}
-                download="timbre-multiplayer-mixed.webm"
-                className="text-xs font-medium text-link hover:underline cursor-pointer"
-              >
-                Download Mixed File
-              </a>
+            {/* AI Transcribe & Save Action Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-hairline">
               <button
                 type="button"
-                onClick={resetMixedRecording}
-                className="text-xs font-medium text-mute hover:text-ink transition-colors cursor-pointer"
+                id="btn-save-ai"
+                disabled={isSaving}
+                onClick={handleSaveAndTranscribe}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-link px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-link/90 transition-all disabled:opacity-60 cursor-pointer"
               >
-                Clear Recording
+                {isSaving ? (
+                  <>
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span>{savingStatus || 'Processing AI Intelligence...'}</span>
+                  </>
+                ) : savedRecordId ? (
+                  <span>✓ Saved & Transcribed</span>
+                ) : (
+                  <span>⚡ Transcribe, Summarize & Save</span>
+                )}
               </button>
+
+              <div className="flex items-center gap-4 text-xs">
+                <a
+                  href={mixedAudioUrl}
+                  download="timbre-multiplayer-mixed.webm"
+                  className="font-medium text-mute hover:text-ink transition-colors cursor-pointer"
+                >
+                  Download Audio
+                </a>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="font-medium text-mute hover:text-red-500 transition-colors cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
             </div>
+
+            {/* Step 5: Render Transcript & Summary below the <audio> playback element */}
+            {(summary || transcript) && (
+              <div className="mt-4 space-y-3.5 border-t border-hairline pt-4">
+                {/* Database Persisted Notice */}
+                {savedRecordId && (
+                  <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 text-xs text-emerald-600 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">✓</span>
+                      <span>Persisted to Phoenix SQLite Database</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-emerald-700/80">
+                      ID: {savedRecordId.substring(0, 18)}...
+                    </span>
+                  </div>
+                )}
+
+                {/* 2-Sentence AI Summary */}
+                {summary && (
+                  <div className="rounded-xl border border-link/25 bg-link/5 p-4 text-left transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-link flex items-center gap-1.5">
+                        <span>🤖</span> AI Summary (GPT-OSS-20B)
+                      </span>
+                      <span className="text-[10px] text-mute font-mono">2-sentence synthesis</span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-ink leading-relaxed font-sans">
+                      {summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Full Transcript */}
+                {transcript && (
+                  <div className="rounded-xl border border-hairline bg-canvas p-4 text-left transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                        <span>📝</span> Full Audio Transcript (Whisper-large-v3)
+                      </span>
+                      <span className="text-[10px] text-mute font-mono">Groq API</span>
+                    </div>
+                    <p className="text-xs text-body leading-relaxed whitespace-pre-wrap font-sans">
+                      {transcript}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
