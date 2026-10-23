@@ -5,7 +5,7 @@ import { RecorderUI } from './components/RecorderUI'
 import { MultiplayerStudio } from './components/MultiplayerStudio'
 import { MasteringModalOrDrawer } from './components/mastering/MasteringModalOrDrawer'
 import { RecordingVault } from './components/vault/RecordingVault'
-import { getClientId, getUrlRoomId, setUrlRoomId } from './services/client'
+import { getClientId, getUrlRoomId } from './services/client'
 import { API_URL } from './services/ai'
 
 type StudioMode = 'solo' | 'multiplayer'
@@ -21,7 +21,7 @@ export default function App() {
   const [wasmOk, setWasmOk] = useState(false)
   const [apiOk, setApiOk] = useState(false)
   const [mode, setMode] = useState<StudioMode>('solo')
-  const [roomId, setRoomId] = useState<string>('lobby')
+  const [roomId, setRoomId] = useState<string | null>(null)
 
   // Mastering Bay & Vault states
   const [isMasteringOpen, setIsMasteringOpen] = useState(false)
@@ -50,11 +50,6 @@ export default function App() {
   // Keep URL updated when mode changes
   const handleModeChange = (newMode: StudioMode) => {
     setMode(newMode)
-    if (newMode === 'multiplayer') {
-      setUrlRoomId(roomId)
-    } else {
-      setUrlRoomId(null)
-    }
   }
 
   // Reach the Phoenix API through dynamic API_URL
@@ -143,61 +138,63 @@ export default function App() {
   )
 
   return (
-    <StudioLayout
-      title="timbre"
-      isConnected={wasmOk}
-      connectedLabel={wasmOk ? 'WASM Ready' : 'Initializing'}
-      navActions={modeSwitcher}
-      onToggleMobileVault={() => setIsMobileVaultOpen((p) => !p)}
-      mobileVaultCount={vaultCount}
-      statusExtras={
-        <div className="flex items-center gap-3">
-          <Dot ok={wasmOk} label="Rust WASM" />
-          <Dot ok={apiOk} label="Phoenix API" />
+    <>
+      <StudioLayout
+        title="timbre"
+        isConnected={wasmOk}
+        connectedLabel={wasmOk ? 'WASM Ready' : 'Initializing'}
+        navActions={modeSwitcher}
+        onToggleMobileVault={() => setIsMobileVaultOpen((p) => !p)}
+        mobileVaultCount={vaultCount}
+        statusExtras={
+          <div className="flex items-center gap-3">
+            <Dot ok={wasmOk} label="Rust WASM" />
+            <Dot ok={apiOk} label="Phoenix API" />
+          </div>
+        }
+        sidebar={
+          <RecordingVault
+            refreshTrigger={vaultRefreshKey}
+            onCountChange={setVaultCount}
+          />
+        }
+        mobileDrawer={
+          <RecordingVault
+            isMobileDrawer={true}
+            isOpen={isMobileVaultOpen}
+            onClose={() => setIsMobileVaultOpen(false)}
+            refreshTrigger={vaultRefreshKey}
+            onCountChange={setVaultCount}
+          />
+        }
+      >
+        {/* Studio Content centered within the Center Stage */}
+        <div className="w-full flex flex-col items-center justify-start">
+          {mode === 'solo' ? (
+            <RecorderUI
+              onRecordingFinished={handleSoloRecordingFinished}
+              onOpenMastering={(blob, durationMs) => {
+                setMasteringSession({ blob, recordingType: 'solo', durationMs })
+                setIsMasteringOpen(true)
+              }}
+            />
+          ) : (
+            <MultiplayerStudio
+              roomId={roomId}
+              onRecordingFinished={handleMultiRecordingFinished}
+              onOpenMastering={(blob, durationMs, rId) => {
+                setMasteringSession({
+                  blob,
+                  recordingType: 'merged',
+                  durationMs,
+                  roomId: rId,
+                })
+                setIsMasteringOpen(true)
+              }}
+            />
+          )}
         </div>
-      }
-      sidebar={
-        <RecordingVault
-          refreshTrigger={vaultRefreshKey}
-          onCountChange={setVaultCount}
-        />
-      }
-      mobileDrawer={
-        <RecordingVault
-          isMobileDrawer={true}
-          isOpen={isMobileVaultOpen}
-          onClose={() => setIsMobileVaultOpen(false)}
-          refreshTrigger={vaultRefreshKey}
-          onCountChange={setVaultCount}
-        />
-      }
-    >
-      {/* Studio Content centered within the Center Stage */}
-      <div className="w-full flex flex-col items-center justify-start">
-        {mode === 'solo' ? (
-          <RecorderUI
-            onRecordingFinished={handleSoloRecordingFinished}
-            onOpenMastering={(blob, durationMs) => {
-              setMasteringSession({ blob, recordingType: 'solo', durationMs })
-              setIsMasteringOpen(true)
-            }}
-          />
-        ) : (
-          <MultiplayerStudio
-            roomId={roomId}
-            onRecordingFinished={handleMultiRecordingFinished}
-            onOpenMastering={(blob, durationMs, rId) => {
-              setMasteringSession({
-                blob,
-                recordingType: 'merged',
-                durationMs,
-                roomId: rId,
-              })
-              setIsMasteringOpen(true)
-            }}
-          />
-        )}
-      </div>
+      </StudioLayout>
 
       {/* Unified Post-Recording Mastering & AI Bay Modal */}
       <MasteringModalOrDrawer
@@ -217,6 +214,6 @@ export default function App() {
           setVaultRefreshKey((prev) => prev + 1)
         }}
       />
-    </StudioLayout>
+    </>
   )
 }

@@ -24,7 +24,9 @@ export function getGroqApiKey(): string {
  */
 export function setGroqApiKey(key: string): void {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('groq_api_key', key.trim())
+    const trimmed = key.trim()
+    localStorage.setItem('groq_api_key', trimmed)
+    window.dispatchEvent(new CustomEvent('groq_key_changed', { detail: trimmed }))
   }
 }
 

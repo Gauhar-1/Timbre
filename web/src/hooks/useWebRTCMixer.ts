@@ -361,9 +361,51 @@ export function useWebRTCMixer(roomId?: string | null): UseWebRTCMixerReturn {
   }, [createPeerConnection, getOrCreateMixer, localPeerId, roomId])
 
   // Start recording the fully mixed session from the MediaStreamAudioDestinationNode
-  const startMixedRecording = useCallback(() => {
-    const mixerDest = mixerDestinationRef.current
+  const startMixedRecording = useCallback(async () => {
+    const { audioCtx, mixerDest } = getOrCreateMixer()
     if (!mixerDest) return
+
+    // Step 1: Explicitly resume AudioContext to fix cross-device autoplay suspension
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume()
+    }
+
+    // Step 1: Dynamically connect all active remote MediaStream tracks to mixer destination
+    peersRef.current.forEach((peerData) => {
+      if (peerData.remoteStream) {
+        const audioTracks = peerData.remoteStream.getAudioTracks()
+        if (audioTracks.length > 0 && audioTracks.some((t) => t.readyState === 'live')) {
+          try {
+            if (peerData.sourceNode) {
+              try {
+                peerData.sourceNode.disconnect()
+              } catch (_) {}
+            }
+            const remoteSource = audioCtx.createMediaStreamSource(peerData.remoteStream)
+            remoteSource.connect(mixerDest)
+            peerData.sourceNode = remoteSource
+          } catch (e) {
+            console.error('Error dynamically connecting remote stream to mixer destination:', e)
+          }
+        }
+      }
+    })
+
+    // Also ensure local microphone stream is connected to mixer destination
+    if (localStreamRef.current && localStreamRef.current.getAudioTracks().some((t) => t.readyState === 'live')) {
+      try {
+        if (localSourceNodeRef.current) {
+          try {
+            localSourceNodeRef.current.disconnect()
+          } catch (_) {}
+        }
+        const localSource = audioCtx.createMediaStreamSource(localStreamRef.current)
+        localSource.connect(mixerDest)
+        localSourceNodeRef.current = localSource
+      } catch (e) {
+        console.error('Error connecting local stream to mixer destination:', e)
+      }
+    }
 
     if (mixedAudioUrl) {
       URL.revokeObjectURL(mixedAudioUrl)
@@ -402,7 +444,9 @@ export function useWebRTCMixer(roomId?: string | null): UseWebRTCMixerReturn {
       }
     }
 
-    // Continuous recording to ensure valid headers across all browsers
+    // Step 1: Explicitly resume AudioContext right before MediaRecorder.start()
+    await audioCtx.resume()
+
     recorder.start()
     setIsRecordingMixed(true)
 
@@ -410,7 +454,7 @@ export function useWebRTCMixer(roomId?: string | null): UseWebRTCMixerReturn {
     recordingTimerRef.current = window.setInterval(() => {
       setRecordingTime(Math.floor((Date.now() - start) / 1000))
     }, 500)
-  }, [mixedAudioUrl])
+  }, [getOrCreateMixer, mixedAudioUrl])
 
   // Stop recording the mixed session
   const stopMixedRecording = useCallback(() => {

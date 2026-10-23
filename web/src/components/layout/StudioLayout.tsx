@@ -1,4 +1,5 @@
 import { Archive } from 'lucide-react'
+import { GroqApiKeyInput } from '../ui/GroqApiKeyInput'
 
 export interface StudioLayoutProps {
   children: React.ReactNode
@@ -78,12 +79,11 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
             </span>
           </div>
 
-          {/* Center: Navigation Actions slot (Solo vs Multiplayer switcher) */}
-          {navActions && (
-            <div className="flex items-center justify-center w-full sm:w-auto overflow-x-auto">
-              {navActions}
-            </div>
-          )}
+          {/* Center: Navigation Actions slot (Solo vs Multiplayer switcher) & Groq API Key Input */}
+          <div className="flex flex-wrap items-center justify-center gap-2.5 w-full sm:w-auto">
+            {navActions}
+            <GroqApiKeyInput />
+          </div>
 
           {/* Right: Pulsing green "Connected" status indicator + system dots */}
           <div className="flex items-center gap-3 sm:gap-4">

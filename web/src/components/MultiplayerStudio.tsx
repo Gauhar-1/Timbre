@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Share2,
   Check,
@@ -11,22 +10,16 @@ import {
   MicOff,
   Disc,
   Square,
-  Sparkles,
-  X,
   Radio,
 } from 'lucide-react'
 import { useWebRTCMixer } from '../hooks/useWebRTCMixer'
 import { AudioWaveform } from './AudioWaveform'
 import { CustomAudioPlayer } from './ui/CustomAudioPlayer'
-import {
-  getGroqApiKey,
-  setGroqApiKey,
-} from '../services/ai'
 import { MasteringBay } from './mastering/MasteringBay'
 import { copyInviteLink, getUrlRoomId, setUrlRoomId } from '../services/client'
 
 export interface MultiplayerStudioProps {
-  roomId?: string
+  roomId : string | null
   onRecordingFinished?: (blob: Blob, durationMs: number, roomId?: string) => void
   onOpenMastering?: (blob: Blob, durationMs: number, roomId?: string) => void
 }
@@ -86,10 +79,7 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   // Copy toast state
   const [copiedInvite, setCopiedInvite] = useState(false)
 
-  // Groq API Key spring-based input animation states
-  const [groqKey, setGroqKey] = useState<string>(() => getGroqApiKey())
-  const [isKeyInputOpen, setIsKeyInputOpen] = useState(false)
-  const [tempKey, setTempKey] = useState<string>(() => getGroqApiKey())
+
 
   // Toggle local mic audio tracks
   const handleToggleMute = () => {
@@ -126,11 +116,7 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
     }
   }
 
-  const handleKeySave = (val: string) => {
-    const trimmed = val.trim()
-    setGroqKey(trimmed)
-    setGroqApiKey(trimmed)
-  }
+
 
   // Step 1: Dynamic Room Creation handlers
   const handleCreateRoom = () => {
@@ -300,71 +286,6 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
               <span>Leave Room</span>
             </button>
 
-            {/* Step 4: Groq API Key Input Animation */}
-            <AnimatePresence mode="wait">
-              {!isKeyInputOpen ? (
-                <motion.button
-                  key="status-pill"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                  type="button"
-                  id="groq-pill-trigger"
-                  onClick={() => {
-                    setTempKey(groqKey)
-                    setIsKeyInputOpen(true)
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/20 px-3 py-1 text-xs font-semibold text-violet-400 border border-violet-500/30 hover:bg-violet-500/30 transition-all cursor-pointer shadow-sm"
-                >
-                  <Sparkles className="h-3 w-3 text-violet-400" />
-                  <span>{groqKey ? 'Groq Key Active' : 'Configure Groq'}</span>
-                </motion.button>
-              ) : (
-                <motion.div
-                  key="input-form"
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 'auto', opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-                  transition={{ type: 'spring', damping: 24, stiffness: 280 }}
-                  className="flex items-center gap-1.5 overflow-hidden rounded-full border border-violet-500/40 bg-zinc-900/90 px-3 py-1 shadow-xl backdrop-blur-md"
-                >
-                  <Sparkles className="h-3 w-3 text-violet-400 shrink-0" />
-                  <input
-                    type="password"
-                    placeholder="gsk_..."
-                    value={tempKey}
-                    onChange={(e) => setTempKey(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleKeySave(tempKey)
-                        setIsKeyInputOpen(false)
-                      }
-                    }}
-                    id="groq-key-input"
-                    className="bg-transparent text-xs text-zinc-100 placeholder-zinc-500 outline-none w-36 sm:w-52 font-mono"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleKeySave(tempKey)
-                      setIsKeyInputOpen(false)
-                    }}
-                    className="rounded-full bg-violet-600 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-violet-500 transition-colors shadow cursor-pointer"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsKeyInputOpen(false)}
-                    className="rounded-full p-0.5 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
 
@@ -532,7 +453,13 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
           <button
             type="button"
             id="record-mixed-toggle-button"
-            onClick={isRecordingMixed ? stopMixedRecording : startMixedRecording}
+            onClick={async () => {
+              if (isRecordingMixed) {
+                stopMixedRecording()
+              } else {
+                await startMixedRecording()
+              }
+            }}
             aria-label={isRecordingMixed ? 'Stop recording mixed session' : 'Record Mixed Session'}
             className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-bold transition-all shadow-xl cursor-pointer ${
               isRecordingMixed

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
@@ -249,13 +250,12 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
     }
   }
 
-  if (!isOpen) return null
-
   const isBusy = isSaving || isTranscribing || isSummarizing || isDspProcessing
 
-  return (
+  const modalNode = (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 select-none">
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 select-none">
         {/* Backdrop overlay */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -662,8 +662,11 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    )}
+  </AnimatePresence>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : modalNode
 }
 
 export const MasteringBay = MasteringModalOrDrawer
