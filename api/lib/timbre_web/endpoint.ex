@@ -17,25 +17,6 @@ defmodule TimbreWeb.Endpoint do
     ],
     longpoll: false
 
-  # Simple CORS handler for cross-origin API and socket requests in production
-  plug :cors_headers
-
-  defp cors_headers(conn, _opts) do
-    conn =
-      conn
-      |> Plug.Conn.put_resp_header("access-control-allow-origin", "*")
-      |> Plug.Conn.put_resp_header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD")
-      |> Plug.Conn.put_resp_header("access-control-allow-headers", "authorization, content-type, accept, origin, user-agent, x-requested-with")
-
-    if conn.method == "OPTIONS" do
-      conn
-      |> Plug.Conn.send_resp(200, "")
-      |> Plug.Conn.halt()
-    else
-      conn
-    end
-  end
-
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),
@@ -66,5 +47,6 @@ defmodule TimbreWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+  plug CORSPlug, origin: "*"
   plug TimbreWeb.Router
 end
