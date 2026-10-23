@@ -2,6 +2,11 @@ import init, { normalize_audio, apply_echo, anonymize_voice } from 'timbre_kit'
 
 export type DspEffect = 'normalize' | 'echo' | 'anonymize'
 
+export interface ProcessedAudio {
+  blob: Blob
+  url: string
+}
+
 let wasmReadyPromise: Promise<unknown> | null = null
 
 /**
@@ -79,12 +84,12 @@ function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
 
 /**
  * Asynchronously decodes an audio Blob, passes PCM samples to Rust WASM in-place,
- * and encodes the resulting AudioBuffer into a playable WAV Object URL.
+ * and encodes the resulting AudioBuffer into a WAV Blob and playable Object URL.
  */
 export async function processAudio(
   audioBlob: Blob,
   effect: DspEffect
-): Promise<string> {
+): Promise<ProcessedAudio> {
   await ensureWasmReady()
 
   const arrayBuffer = await audioBlob.arrayBuffer()
@@ -129,7 +134,12 @@ export async function processAudio(
     }
 
     const wavBlob = audioBufferToWavBlob(audioBuffer)
-    return URL.createObjectURL(wavBlob)
+    const objectUrl = URL.createObjectURL(wavBlob)
+
+    return {
+      blob: wavBlob,
+      url: objectUrl,
+    }
   } finally {
     await audioCtx.close()
   }

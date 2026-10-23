@@ -8,16 +8,41 @@ defmodule Timbre.Recordings do
   alias Timbre.Recordings.Recording
 
   @doc """
-  Returns the list of recordings.
+  Returns the list of recordings with optional query filtering by recording_type and client_id.
   Omits the audio_blob field to conserve database I/O, memory, and network bandwidth.
+  Ordered by inserted_at: :desc.
   """
-  def list_recordings do
-    from(r in Recording,
-      order_by: [desc: r.inserted_at],
-      select: struct(r, [:id, :title, :content_type, :duration_ms, :transcript, :summary, :inserted_at, :updated_at])
+  def list_recordings(filters \\ %{}) do
+    Recording
+    |> order_by([r], desc: r.inserted_at)
+    |> select(
+      [r],
+      struct(r, [
+        :id,
+        :title,
+        :recording_type,
+        :client_id,
+        :room_id,
+        :content_type,
+        :duration_ms,
+        :transcript,
+        :summary,
+        :inserted_at,
+        :updated_at
+      ])
     )
+    |> filter_by_type(filters["recording_type"] || filters[:recording_type])
+    |> filter_by_client(filters["client_id"] || filters[:client_id])
     |> Repo.all()
   end
+
+  defp filter_by_type(query, nil), do: query
+  defp filter_by_type(query, ""), do: query
+  defp filter_by_type(query, type), do: where(query, [r], r.recording_type == ^type)
+
+  defp filter_by_client(query, nil), do: query
+  defp filter_by_client(query, ""), do: query
+  defp filter_by_client(query, client_id), do: where(query, [r], r.client_id == ^client_id)
 
   @doc """
   Gets a single recording by id.

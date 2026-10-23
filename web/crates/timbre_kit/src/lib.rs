@@ -18,13 +18,13 @@ pub fn rms_level(samples: &[f32]) -> f32 {
 ///
 /// Guarantees samples remain strictly bounded within [-1.0, 1.0] with zero allocations.
 #[wasm_bindgen]
-pub fn normalize_audio(audio_data: &mut [f32]) {
-    if audio_data.is_empty() {
+pub fn normalize_audio(samples: &mut [f32]) {
+    if samples.is_empty() {
         return;
     }
 
     // Find peak amplitude across all samples
-    let peak = audio_data.iter().fold(0.0f32, |acc, &s| {
+    let peak = samples.iter().fold(0.0f32, |acc, &s| {
         if s.is_nan() {
             acc
         } else {
@@ -40,7 +40,7 @@ pub fn normalize_audio(audio_data: &mut [f32]) {
     let target_peak = 0.95f32;
     let gain = target_peak / peak;
 
-    for sample in audio_data.iter_mut() {
+    for sample in samples.iter_mut() {
         if sample.is_nan() {
             *sample = 0.0;
         } else {
@@ -54,13 +54,13 @@ pub fn normalize_audio(audio_data: &mut [f32]) {
 /// Implements a zero-allocation feedback delay line where delayed echoes
 /// recirculate back into the audio stream with controllable decay.
 #[wasm_bindgen]
-pub fn apply_echo(audio_data: &mut [f32], sample_rate: usize, delay_ms: usize, decay: f32) {
-    if audio_data.is_empty() || sample_rate == 0 || delay_ms == 0 {
+pub fn apply_echo(samples: &mut [f32], sample_rate: usize, delay_ms: usize, decay: f32) {
+    if samples.is_empty() || sample_rate == 0 || delay_ms == 0 {
         return;
     }
 
     let delay_samples = (sample_rate * delay_ms) / 1000;
-    if delay_samples == 0 || delay_samples >= audio_data.len() {
+    if delay_samples == 0 || delay_samples >= samples.len() {
         return;
     }
 
@@ -68,11 +68,11 @@ pub fn apply_echo(audio_data: &mut [f32], sample_rate: usize, delay_ms: usize, d
 
     // In-place feedback delay loop (IIR):
     // Each sample at index i receives the decaying feedback from sample (i - delay_samples).
-    for i in delay_samples..audio_data.len() {
-        let delayed_sample = audio_data[i - delay_samples];
-        let current = audio_data[i];
+    for i in delay_samples..samples.len() {
+        let delayed_sample = samples[i - delay_samples];
+        let current = samples[i];
         let new_sample = current + delayed_sample * decay_factor;
-        audio_data[i] = new_sample.clamp(-1.0, 1.0);
+        samples[i] = new_sample.clamp(-1.0, 1.0);
     }
 }
 
@@ -81,15 +81,15 @@ pub fn apply_echo(audio_data: &mut [f32], sample_rate: usize, delay_ms: usize, d
 /// Multiplies the vocal signal by a carrier wave (~55Hz) to split vocal harmonics
 /// into robotic sidebands while keeping speech fully intelligible.
 #[wasm_bindgen]
-pub fn anonymize_voice(audio_data: &mut [f32], sample_rate: usize) {
-    if audio_data.is_empty() || sample_rate == 0 {
+pub fn anonymize_voice(samples: &mut [f32], sample_rate: usize) {
+    if samples.is_empty() || sample_rate == 0 {
         return;
     }
 
     let carrier_freq = 55.0f32; // Low-frequency carrier creates classic voice scrambler effect
     let step = (2.0 * std::f32::consts::PI * carrier_freq) / (sample_rate as f32);
 
-    for (i, sample) in audio_data.iter_mut().enumerate() {
+    for (i, sample) in samples.iter_mut().enumerate() {
         if sample.is_nan() {
             *sample = 0.0;
             continue;
