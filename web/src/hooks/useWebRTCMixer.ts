@@ -197,8 +197,10 @@ export function useWebRTCMixer(roomId?: string | null): UseWebRTCMixerReturn {
         localSource.connect(mixerDest)
         localSourceNodeRef.current = localSource
 
-        // 4. Connect Phoenix Socket via proxy (/socket)
-        const socket = new Socket('/socket', {
+        // 4. Connect Phoenix Socket via dynamic WebSocket URL
+        const rawApiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:4010').replace(/\/+$/, '')
+        const wsUrl = rawApiUrl.replace(/^http/, 'ws')
+        const socket = new Socket(`${wsUrl}/socket`, {
           params: { peerId: localPeerId },
         })
         socket.connect()

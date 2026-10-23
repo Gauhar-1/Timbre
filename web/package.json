@@ -6,7 +6,7 @@
   "scripts": {
     "build:wasm": "wasm-pack build crates/timbre_kit --target web --out-dir pkg",
     "dev": "vite",
-    "build": "npm run build:wasm && tsc -b && vite build",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run"

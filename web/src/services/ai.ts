@@ -200,6 +200,8 @@ export async function generateTitleAndSummary(
   }
 }
 
+export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4010').replace(/\/+$/, '')
+
 /**
  * Submits the mixed audio Blob, Transcript, and Summary to the Phoenix API /api/recordings endpoint.
  */
@@ -236,7 +238,7 @@ export async function saveRecordingToDatabase(params: {
   formData.append('transcript', transcript)
   formData.append('summary', summary)
 
-  const response = await fetch('/api/recordings', {
+  const response = await fetch(`${API_URL}/api/recordings`, {
     method: 'POST',
     body: formData,
   })

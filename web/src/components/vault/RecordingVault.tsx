@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { getClientId } from '../../services/client'
 import { CustomAudioPlayer } from '../ui/CustomAudioPlayer'
+import { API_URL } from '../../services/ai'
 
 export interface RecordingItem {
   id: string
@@ -72,7 +73,7 @@ export const RecordingVault: React.FC<RecordingVaultProps> = ({
         ? localStorage.getItem('timbre_client_id') || getClientId()
         : ''
 
-      const url = `/api/recordings?client_id=${encodeURIComponent(clientId)}`
+      const url = `${API_URL}/api/recordings?client_id=${encodeURIComponent(clientId)}`
 
       const res = await fetch(url)
       if (!res.ok) {
@@ -294,7 +295,7 @@ export const RecordingVault: React.FC<RecordingVaultProps> = ({
 
                 {/* Custom Audio Player with streaming and seek */}
                 <CustomAudioPlayer
-                  src={`/api/recordings/${item.id}/audio`}
+                  src={`${API_URL}/api/recordings/${item.id}/audio`}
                   showVolume={false}
                   showReset={false}
                   className="px-2.5 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800/60 text-xs"

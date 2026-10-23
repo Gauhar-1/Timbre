@@ -6,6 +6,7 @@ import { MultiplayerStudio } from './components/MultiplayerStudio'
 import { MasteringModalOrDrawer } from './components/mastering/MasteringModalOrDrawer'
 import { RecordingVault } from './components/vault/RecordingVault'
 import { getClientId, getUrlRoomId, setUrlRoomId } from './services/client'
+import { API_URL } from './services/ai'
 
 type StudioMode = 'solo' | 'multiplayer'
 
@@ -56,10 +57,10 @@ export default function App() {
     }
   }
 
-  // Reach the Phoenix API through dev proxy
+  // Reach the Phoenix API through dynamic API_URL
   useEffect(() => {
     const checkApi = () => {
-      fetch('/api/hello')
+      fetch(`${API_URL}/api/hello`)
         .then((r) => setApiOk(r.ok))
         .catch(() => setApiOk(false))
     }
