@@ -261,6 +261,7 @@ export const MultiplayerStudio: React.FC = () => {
                 key={stream.id}
                 stream={stream}
                 isActive={true}
+                isLocal={false}
                 label={`Peer Stream #${idx + 1}`}
                 sublabel={connectedPeers[idx] || stream.id}
               />

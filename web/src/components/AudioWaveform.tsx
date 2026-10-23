@@ -1,4 +1,5 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
+import { Volume2, VolumeX } from 'lucide-react'
 
 export interface AudioWaveformProps {
   stream: MediaStream | null
@@ -7,6 +8,7 @@ export interface AudioWaveformProps {
   sublabel?: string
   isLocal?: boolean
   className?: string
+  defaultVolume?: number
 }
 
 export const AudioWaveform: React.FC<AudioWaveformProps> = ({
@@ -16,9 +18,83 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
   sublabel,
   isLocal = false,
   className,
+  defaultVolume = 0.85,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Remote audio output controls (only applicable when !isLocal)
+  const [volume, setVolume] = useState<number>(defaultVolume)
+  const [isRemoteMuted, setIsRemoteMuted] = useState<boolean>(false)
+  const [autoplayBlocked, setAutoplayBlocked] = useState<boolean>(false)
+
+  // Manage remote audio playback and volume
+  useEffect(() => {
+    const audioEl = audioRef.current
+    if (!audioEl || !stream) return
+
+    // Attach stream to the audio element to activate decoding in Chromium
+    audioEl.srcObject = stream
+
+    if (isLocal) {
+      // Local microphone must remain strictly muted to prevent immediate feedback/echo
+      audioEl.muted = true
+    } else {
+      // Remote peers must be audible to the user's speakers/headphones
+      audioEl.muted = isRemoteMuted
+      audioEl.volume = isRemoteMuted ? 0 : volume
+
+      audioEl
+        .play()
+        .then(() => setAutoplayBlocked(false))
+        .catch((err) => {
+          console.warn('[AudioWaveform] Autoplay blocked, waiting for user gesture:', err)
+          setAutoplayBlocked(true)
+        })
+    }
+  }, [stream, isLocal, isRemoteMuted, volume])
+
+  // Automatically attempt playback on first user click if autoplay was blocked
+  useEffect(() => {
+    if (isLocal || !autoplayBlocked) return
+    const handleGesture = () => {
+      if (audioRef.current && !isLocal) {
+        audioRef.current
+          .play()
+          .then(() => setAutoplayBlocked(false))
+          .catch(() => {})
+      }
+    }
+    window.addEventListener('click', handleGesture, { once: true })
+    return () => window.removeEventListener('click', handleGesture)
+  }, [isLocal, autoplayBlocked])
+
+  // Update volume and mute state on slider or toggle change
+  const handleVolumeChange = (newVol: number) => {
+    setVolume(newVol)
+    if (newVol > 0 && isRemoteMuted) {
+      setIsRemoteMuted(false)
+    }
+    if (audioRef.current && !isLocal) {
+      audioRef.current.volume = newVol
+      audioRef.current.muted = newVol === 0
+    }
+  }
+
+  const handleToggleMute = () => {
+    setIsRemoteMuted((prev) => {
+      const next = !prev
+      if (audioRef.current && !isLocal) {
+        audioRef.current.muted = next
+        if (!next && audioRef.current.paused) {
+          audioRef.current.play().catch(() => {})
+        }
+      }
+      return next
+    })
+  }
+
+  // Web Audio Analyser visualization loop
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -44,7 +120,6 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
       return
     }
 
-    // Step 2: Web Audio Hook & Routing
     const AudioCtx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -59,7 +134,7 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
     let sourceNode: MediaStreamAudioSourceNode | null = null
     try {
       sourceNode = audioCtx.createMediaStreamSource(stream)
-      // Crucial Routing: Do NOT connect analyser to audioCtx.destination to prevent feedback loops
+      // Visualizer connects ONLY to AnalyserNode, NOT to audioCtx.destination
       sourceNode.connect(analyser)
     } catch (err) {
       console.warn('[AudioWaveform] Failed to connect stream to analyser:', err)
@@ -70,7 +145,6 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
 
     let animationFrameId: number
 
-    // Step 3: requestAnimationFrame Loop
     const draw = () => {
       animationFrameId = requestAnimationFrame(draw)
 
@@ -88,18 +162,14 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
 
       analyser.getByteTimeDomainData(dataArray)
 
-      // Clear the canvas context on every frame
       ctx.clearRect(0, 0, width, height)
 
-      // Style the stroke: lineWidth = 3, strokeStyle = '#8b5cf6' with subtle glow
       ctx.lineWidth = 3
       ctx.strokeStyle = '#8b5cf6'
       ctx.shadowBlur = 10
       ctx.shadowColor = '#8b5cf6'
 
-      // Draw the waveform using ctx.beginPath(), ctx.lineTo(), and ctx.stroke()
       ctx.beginPath()
-
       const sliceWidth = width / bufferLength
       let x = 0
 
@@ -122,7 +192,6 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
 
     draw()
 
-    // Proper cleanup
     return () => {
       cancelAnimationFrame(animationFrameId)
       if (sourceNode) {
@@ -130,6 +199,9 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
       }
       analyser.disconnect()
       audioCtx.close().catch(() => {})
+      if (audioRef.current) {
+        audioRef.current.srcObject = null
+      }
     }
   }, [stream, isActive])
 
@@ -161,24 +233,85 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
           )}
         </div>
 
-        {sublabel && (
-          <span className="font-mono text-[10px] text-zinc-500 truncate max-w-[140px]">
-            {sublabel}
-          </span>
-        )}
+        {/* Status / Autoplay Button or Sublabel */}
+        <div className="flex items-center gap-2">
+          {!isLocal && autoplayBlocked && (
+            <button
+              type="button"
+              onClick={() => {
+                audioRef.current
+                  ?.play()
+                  .then(() => setAutoplayBlocked(false))
+                  .catch(() => {})
+              }}
+              className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm hover:bg-violet-500 transition-all cursor-pointer animate-pulse"
+            >
+              🔊 Click to Hear
+            </button>
+          )}
+
+          {sublabel && (
+            <span className="font-mono text-[10px] text-zinc-500 truncate max-w-[130px]">
+              {sublabel}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Step 1: Responsive Canvas */}
+      {/* Responsive Canvas + Audio Element */}
       <div className="relative flex-1 w-full my-2 flex items-center justify-center min-h-[60px]">
         <canvas ref={canvasRef} className="w-full h-full block" />
+        {/* Local mic is strictly muted; remote peer audio is unmuted and audible */}
+        <audio
+          ref={audioRef}
+          autoPlay
+          playsInline
+          muted={isLocal ? true : isRemoteMuted}
+          className="hidden"
+        />
       </div>
 
-      {/* Bottom info pill */}
+      {/* Bottom Info & Audio Controls */}
       <div className="relative z-10 flex items-center justify-between text-[10px] text-zinc-400 border-t border-zinc-900/60 pt-2">
         <span className="font-mono">FFT: 2048 • Time-Domain</span>
-        <span className="font-medium text-violet-400/90">
-          {stream && isActive ? 'Signal Live' : 'Idle'}
-        </span>
+
+        {!isLocal ? (
+          /* Interactive Speaker Volume Control for Remote Peers */
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleToggleMute}
+              title={isRemoteMuted ? 'Unmute peer voice' : 'Mute peer voice'}
+              aria-label={isRemoteMuted ? 'Unmute peer voice' : 'Mute peer voice'}
+              className="text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+            >
+              {isRemoteMuted || volume === 0 ? (
+                <VolumeX className="h-3.5 w-3.5 text-red-400" />
+              ) : (
+                <Volume2 className="h-3.5 w-3.5 text-violet-400" />
+              )}
+            </button>
+
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={isRemoteMuted ? 0 : volume}
+              onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+              className="w-16 h-1 bg-zinc-800 rounded cursor-pointer accent-violet-500"
+              title="Remote peer output volume"
+            />
+
+            <span className="font-mono text-zinc-300 w-8 text-right">
+              {isRemoteMuted ? 'Off' : `${Math.round(volume * 100)}%`}
+            </span>
+          </div>
+        ) : (
+          <span className="font-medium text-zinc-500">
+            {stream && isActive ? 'Local Mic (Self-muted to prevent feedback)' : 'Idle'}
+          </span>
+        )}
       </div>
     </div>
   )
