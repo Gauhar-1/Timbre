@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Sliders, Sparkles, Volume2, Shield, Database } from 'lucide-react'
+import { CustomAudioPlayer } from './ui/CustomAudioPlayer'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { processAudio, DspEffect } from '../services/dsp'
 import { saveRecordingToDatabase } from '../services/ai'
@@ -347,12 +348,12 @@ export const RecorderUI: React.FC<RecorderUIProps> = ({
               )}
             </div>
 
-            {/* Native HTML audio element */}
-            <audio
+            {/* Custom Audio Player replacing native player */}
+            <CustomAudioPlayer
               key={currentAudioSrc}
               src={currentAudioSrc}
-              controls
-              className="w-full rounded-xl outline-none"
+              showReset={true}
+              className="bg-zinc-900/60"
             />
 
             {savedId && (

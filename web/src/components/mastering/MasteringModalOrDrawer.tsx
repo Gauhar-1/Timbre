@@ -1,18 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
   Sliders,
   Volume2,
   Shield,
-  Play,
-  Pause,
   CheckCircle2,
   ArrowRight,
   Database,
   X,
   Cpu,
 } from 'lucide-react'
+import { CustomAudioPlayer } from '../CustomAudioPlayer'
 import { processAudio, DspEffect } from '../../services/dsp'
 import {
   transcribeAudio,
@@ -52,12 +51,6 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
   const [selectedSource, setSelectedSource] = useState<'original' | 'processed'>('original')
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
 
-  // Audio Playback
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [totalDuration, setTotalDuration] = useState(0)
-
   // Save & AI Pipeline States
   const [saveStep, setSaveStep] = useState<SaveStep>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -83,7 +76,6 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
       setSaveStep('idle')
       setSavedResult(null)
       setErrorMsg(null)
-      setIsPlaying(false)
 
       return () => {
         URL.revokeObjectURL(url)
@@ -137,27 +129,6 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
   const activeAudioUrl = selectedSource === 'processed' && processedUrl ? processedUrl : originalUrl
   const activeBlobToSave = selectedSource === 'processed' && processedBlob ? processedBlob : audioBlob
 
-  // Handle Play/Pause
-  const togglePlayPause = () => {
-    if (!audioRef.current) return
-    if (isPlaying) {
-      audioRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      audioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false))
-    }
-  }
-
-  // Handle Seek
-  const handleSeek = (newTime: number) => {
-    if (!audioRef.current) return
-    audioRef.current.currentTime = newTime
-    setCurrentTime(newTime)
-  }
-
   // Execute Save & AI Pipeline
   const handleSaveToVault = async () => {
     if (!activeBlobToSave) return
@@ -187,7 +158,7 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
       const record = await saveRecordingToDatabase({
         audioBlob: activeBlobToSave,
         title,
-        durationMs: durationMs || Math.round(totalDuration * 1000) || 3000,
+        durationMs: durationMs || 3000,
         transcript,
         summary,
         recordingType,
@@ -208,12 +179,6 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
       setErrorMsg(msg)
       setSaveStep('idle')
     }
-  }
-
-  const formatTime = (secs: number) => {
-    const mins = Math.floor(secs / 60)
-    const rem = Math.floor(secs % 60)
-    return `${mins.toString().padStart(2, '0')}:${rem.toString().padStart(2, '0')}`
   }
 
   if (!isOpen) return null
@@ -365,59 +330,15 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Custom Seek Bar & Transport Controls */}
-                  <div className="flex items-center gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={togglePlayPause}
-                      disabled={!activeAudioUrl}
-                      aria-label={isPlaying ? 'Pause' : 'Play'}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-600 text-white shadow-md hover:bg-violet-500 transition-all cursor-pointer"
-                    >
-                      {isPlaying ? (
-                        <Pause className="h-4 w-4 fill-current" />
-                      ) : (
-                        <Play className="h-4 w-4 fill-current translate-x-0.5" />
-                      )}
-                    </button>
-
-                    <div className="flex-1 space-y-1">
-                      <input
-                        type="range"
-                        min="0"
-                        max={totalDuration || 1}
-                        step="0.05"
-                        value={currentTime}
-                        onChange={(e) => handleSeek(parseFloat(e.target.value))}
-                        className="w-full h-1.5 bg-zinc-800 rounded-lg cursor-pointer accent-violet-500"
-                      />
-                      <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                        <span>{formatTime(currentTime)}</span>
-                        <span>{formatTime(totalDuration)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Hidden Native Audio Element Driving Playback */}
-                  {activeAudioUrl && (
-                    <audio
-                      ref={audioRef}
-                      key={activeAudioUrl}
+                  {/* Custom Audio Player replacing native player */}
+                  <div className="pt-1">
+                    <CustomAudioPlayer
+                      key={activeAudioUrl || 'empty'}
                       src={activeAudioUrl}
-                      onTimeUpdate={() => {
-                        if (audioRef.current) {
-                          setCurrentTime(audioRef.current.currentTime)
-                        }
-                      }}
-                      onLoadedMetadata={() => {
-                        if (audioRef.current) {
-                          setTotalDuration(audioRef.current.duration || 0)
-                        }
-                      }}
-                      onEnded={() => setIsPlaying(false)}
-                      className="hidden"
+                      showReset={true}
+                      className="bg-zinc-900/60 border border-zinc-800/80"
                     />
-                  )}
+                  </div>
                 </div>
 
                 {/* 2. DSP Effects Rack (Part 2) */}

@@ -5,12 +5,18 @@ import {
   Check,
   Sliders,
   Users,
-  Settings,
   Download,
   AlertCircle,
+  Mic,
+  MicOff,
+  Disc,
+  Square,
+  Sparkles,
+  X,
 } from 'lucide-react'
 import { useWebRTCMixer } from '../hooks/useWebRTCMixer'
 import { AudioWaveform } from './AudioWaveform'
+import { CustomAudioPlayer } from './ui/CustomAudioPlayer'
 import {
   transcribeAudio,
   summarizeText,
@@ -53,16 +59,34 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
     resetMixedRecording: resetBaseRecording,
   } = useWebRTCMixer(channelTopic)
 
+  // Local Microphone Mute state
+  const [isMuted, setIsMuted] = useState(false)
+
   // AI Pipeline & Persistence states
   const [isSaving, setIsSaving] = useState(false)
-  const [savingStatus, setSavingStatus] = useState<string>('')
-  const [transcript, setTranscript] = useState<string | null>(null)
-  const [summary, setSummary] = useState<string | null>(null)
   const [savedRecordId, setSavedRecordId] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   // Copy toast state
   const [copiedInvite, setCopiedInvite] = useState(false)
+
+  // Groq API Key spring-based input animation states
+  const [groqKey, setGroqKey] = useState<string>(() => getGroqApiKey())
+  const [isKeyInputOpen, setIsKeyInputOpen] = useState(false)
+  const [tempKey, setTempKey] = useState<string>(() => getGroqApiKey())
+
+  // Toggle local mic audio tracks
+  const handleToggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev
+      if (localStream) {
+        localStream.getAudioTracks().forEach((track) => {
+          track.enabled = !next
+        })
+      }
+      return next
+    })
+  }
 
   // Track recording transition to trigger Mastering Bay
   const wasRecordingMixedRef = useRef(false)
@@ -73,14 +97,10 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
     wasRecordingMixedRef.current = isRecordingMixed
   }, [isRecordingMixed, mixedAudioBlob, recordingTime, activeRoomKey, onRecordingFinished])
 
-  // API Key management
-  const [groqKey, setGroqKey] = useState<string>(() => getGroqApiKey())
-  const [showKeyConfig, setShowKeyConfig] = useState(false)
-
   const handleKeySave = (val: string) => {
-    setGroqKey(val)
-    setGroqApiKey(val)
-    setShowKeyConfig(false)
+    const trimmed = val.trim()
+    setGroqKey(trimmed)
+    setGroqApiKey(trimmed)
   }
 
   const handleCopyInvite = async () => {
@@ -92,8 +112,6 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   }
 
   const handleReset = () => {
-    setTranscript(null)
-    setSummary(null)
     setSavedRecordId(null)
     setSaveError(null)
     resetBaseRecording()
@@ -107,15 +125,9 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
       setIsSaving(true)
       setSaveError(null)
 
-      setSavingStatus('Transcribing mixed audio (Whisper-large-v3)...')
       const transcribedText = await transcribeAudio(mixedAudioBlob, groqKey)
-      setTranscript(transcribedText)
-
-      setSavingStatus('Generating 2-sentence summary (GPT-OSS-20B)...')
       const summaryText = await summarizeText(transcribedText, groqKey)
-      setSummary(summaryText)
 
-      setSavingStatus('Saving to Phoenix SQLite database...')
       const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       const record = await saveRecordingToDatabase({
         audioBlob: mixedAudioBlob,
@@ -129,7 +141,6 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
       })
 
       setSavedRecordId(record.id)
-      setSavingStatus('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transcription/saving failed'
       setSaveError(msg)
@@ -151,8 +162,9 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   }
 
   return (
-    <div className="w-full max-w-xl mx-auto space-y-6 select-none">
-      <div className="relative overflow-hidden rounded-3xl border border-zinc-800/80 bg-zinc-950/80 p-6 sm:p-8 shadow-2xl backdrop-blur-xl transition-all">
+    <div className="w-full max-w-5xl mx-auto space-y-6 select-none pb-28">
+      {/* Studio Header Card */}
+      <div className="relative overflow-hidden rounded-3xl border border-zinc-800/80 bg-zinc-950/80 p-5 sm:p-7 shadow-2xl backdrop-blur-xl transition-all">
         {/* Ambient background glow */}
         <div
           className={`pointer-events-none absolute -top-24 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full blur-3xl transition-opacity duration-700 ${
@@ -165,7 +177,7 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
         />
 
         {/* Studio Header & Real-time WebRTC Status Badges */}
-        <div className="relative flex flex-col items-center text-center">
+        <div className="relative flex flex-col items-center text-center space-y-2.5">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
               Part 3 • Live Mixer
@@ -190,19 +202,19 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
             {/* Active peer count badge */}
             <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-300">
               <Users className="h-3 w-3 text-violet-400" />
-              <span>{connectedPeers.length + 1} Online</span>
+              <span>{connectedPeers.length + 1} Mesh Nodes</span>
             </span>
           </div>
 
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-zinc-100 sm:text-3xl">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-100">
             Multiplayer Live Mixer
           </h2>
-          <p className="mt-1 text-xs sm:text-sm text-zinc-400">
-            Real-time WebRTC mesh audio mixer with synchronized HTML5 waveforms.
+          <p className="text-xs text-zinc-400 max-w-lg">
+            Low-latency WebRTC mesh audio mixer with synchronized HTML5 waveforms and master destination recording.
           </p>
 
-          {/* Action Bar: Invite Link + Key Config */}
-          <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2.5">
+          {/* Action Bar: Invite Link + Spring Animated Groq Key Input */}
+          <div className="pt-1 flex flex-wrap items-center justify-center gap-3">
             {/* Copy Invite Link Button */}
             <button
               type="button"
@@ -210,7 +222,7 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
               onClick={handleCopyInvite}
               className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-sm ${
                 copiedInvite
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-emerald-600 text-white shadow-emerald-500/20'
                   : 'bg-violet-600/20 text-violet-300 border border-violet-500/30 hover:bg-violet-600/30 hover:text-white'
               }`}
             >
@@ -227,324 +239,272 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
               )}
             </button>
 
-            {/* API Key Settings Button */}
-            <button
-              type="button"
-              onClick={() => setShowKeyConfig((p) => !p)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-            >
-              <Settings className="h-3 w-3" />
-              <span>{groqKey ? 'Groq Key Set' : 'Configure Groq'}</span>
-            </button>
+            {/* Step 4: Groq API Key Input Animation */}
+            <AnimatePresence mode="wait">
+              {!isKeyInputOpen ? (
+                <motion.button
+                  key="status-pill"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  type="button"
+                  id="groq-pill-trigger"
+                  onClick={() => {
+                    setTempKey(groqKey)
+                    setIsKeyInputOpen(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/20 px-3 py-1 text-xs font-semibold text-violet-400 border border-violet-500/30 hover:bg-violet-500/30 transition-all cursor-pointer shadow-sm"
+                >
+                  <Sparkles className="h-3 w-3 text-violet-400" />
+                  <span>{groqKey ? 'Groq Key Active' : 'Configure Groq'}</span>
+                </motion.button>
+              ) : (
+                <motion.div
+                  key="input-form"
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 'auto', opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ type: 'spring', damping: 24, stiffness: 280 }}
+                  className="flex items-center gap-1.5 overflow-hidden rounded-full border border-violet-500/40 bg-zinc-900/90 px-3 py-1 shadow-xl backdrop-blur-md"
+                >
+                  <Sparkles className="h-3 w-3 text-violet-400 shrink-0" />
+                  <input
+                    type="password"
+                    placeholder="gsk_..."
+                    value={tempKey}
+                    onChange={(e) => setTempKey(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleKeySave(tempKey)
+                        setIsKeyInputOpen(false)
+                      }
+                    }}
+                    id="groq-key-input"
+                    className="bg-transparent text-xs text-zinc-100 placeholder-zinc-500 outline-none w-36 sm:w-52 font-mono"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleKeySave(tempKey)
+                      setIsKeyInputOpen(false)
+                    }}
+                    className="rounded-full bg-violet-600 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-violet-500 transition-colors shadow cursor-pointer"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsKeyInputOpen(false)}
+                    className="rounded-full p-0.5 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
-        {/* Collapsible API Key Config Form */}
-        <AnimatePresence>
-          {showKeyConfig && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 text-left transition-all"
-            >
-              <label className="block text-xs font-semibold text-zinc-200 mb-1">
-                Groq API Key (for Whisper-large-v3 & GPT-OSS-20B)
-              </label>
-              <p className="text-[11px] text-zinc-400 mb-2.5">
-                Keys persist securely in browser localStorage. Leave blank to use instant demo simulation.
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  placeholder="gsk_..."
-                  defaultValue={groqKey}
-                  id="groq-key-input"
-                  className="flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const el = document.getElementById('groq-key-input') as HTMLInputElement | null
-                    handleKeySave(el?.value || '')
-                  }}
-                  className="rounded-xl bg-violet-600 text-white px-3.5 py-1.5 text-xs font-semibold hover:bg-violet-500 cursor-pointer shadow"
-                >
-                  Save
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Error notification banner */}
         {(error || saveError) && (
-          <div className="mt-5 rounded-2xl border border-red-500/25 bg-red-500/10 p-3.5 text-center text-xs font-medium text-red-400 flex items-center justify-center gap-2">
+          <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-center text-xs font-medium text-red-400 flex items-center justify-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error || saveError}</span>
           </div>
         )}
+      </div>
 
-        {/* Session Participants Grid */}
-        <div className="relative mt-5 rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-4">
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2 mb-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5 text-violet-400" />
-              <span>Session Mesh Participants ({connectedPeers.length + 1})</span>
-            </span>
-            <span className="text-[10px] font-mono text-zinc-400">
-              Streams: {remoteStreams.length + 1}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {/* Local participant badge */}
-            <div className="flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-300 font-medium">
-              <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse" />
-              <span>You ({localPeerId.substring(0, 10)}...)</span>
-              <span className="text-[9px] bg-violet-500/20 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
-                Host
-              </span>
-            </div>
-
-            {/* Remote participants */}
-            {connectedPeers.map((peerId) => (
-              <div
-                key={peerId}
-                className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-1.5 text-xs text-zinc-300 font-medium transition-all"
-              >
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>{peerId.substring(0, 10)}...</span>
-                <span className="text-[9px] text-emerald-400 bg-emerald-500/10 px-1 rounded font-mono">
-                  Peer
-                </span>
-              </div>
-            ))}
-
-            {connectedPeers.length === 0 && (
-              <div className="w-full text-center py-2 text-xs text-zinc-400 italic">
-                Share the invite link to join and mix multiple voices in real time.
-              </div>
-            )}
-          </div>
+      {/* Step 3: Responsive Multi-Stream Grid (gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3) */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+            <span>📊</span> Audio Waveform Canvas Grid ({remoteStreams.length + 1} Channels)
+          </span>
+          <span className="text-[10px] text-zinc-500 font-mono">
+            HTML5 Canvas • AnalyserNode
+          </span>
         </div>
 
-        {/* Live HTML5 Canvas Waveform Grid */}
-        <div className="relative mt-5 space-y-3">
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-              <span>📊</span> Live Waveforms ({remoteStreams.length + 1})
-            </span>
-            <span className="text-[10px] text-zinc-400 font-mono">
-              HTML5 Canvas • Violet Glow
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Local Microphone Waveform */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Cell 1: Local Microphone Waveform */}
+          <div className="h-44">
             <AudioWaveform
               stream={localStream}
-              isActive={true}
+              isActive={!isMuted}
               isLocal={true}
               label={`You (${localPeerId.substring(0, 8)}...)`}
               sublabel="Host • Local Mic"
+              className="h-full w-full"
             />
+          </div>
 
-            {/* Remote WebRTC Streams Waveforms */}
-            {remoteStreams.map((stream, idx) => (
+          {/* Cells 2+: Remote WebRTC Streams Waveforms */}
+          {remoteStreams.map((stream, idx) => (
+            <div key={stream.id} className="h-44">
               <AudioWaveform
-                key={stream.id}
                 stream={stream}
                 isActive={true}
                 isLocal={false}
-                label={`Peer Stream #${idx + 1}`}
+                label={`Peer #${idx + 1}`}
                 sublabel={connectedPeers[idx] ? `${connectedPeers[idx].substring(0, 8)}...` : stream.id}
+                className="h-full w-full"
               />
-            ))}
-          </div>
+            </div>
+          ))}
+
+          {/* Empty peer slots card if fewer than 2 peers connected */}
+          {remoteStreams.length === 0 && (
+            <div className="h-44 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 p-4 flex flex-col items-center justify-center text-center space-y-2">
+              <div className="h-8 w-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+                <Users className="h-4 w-4" />
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-semibold text-zinc-300">Awaiting Remote Peers</h4>
+                <p className="text-[10px] text-zinc-500 max-w-[200px]">
+                  Share your invite link with another tab or browser to stream live waveforms.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyInvite}
+                className="text-[10px] font-semibold text-violet-400 hover:text-violet-300 underline cursor-pointer"
+              >
+                Copy Invite Link
+              </button>
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* Central Record Mixed Session Interactive Area */}
-        <div className="relative my-7 flex flex-col items-center justify-center">
-          <div className="relative flex items-center justify-center">
-            {isRecordingMixed && (
-              <span className="absolute inline-flex h-28 w-28 animate-ping rounded-full bg-red-500/30 opacity-75" />
-            )}
-
-            {/* Large Record / Stop Mixed Session Button */}
-            <button
-              type="button"
-              id="record-mixed-toggle-button"
-              onClick={isRecordingMixed ? stopMixedRecording : startMixedRecording}
-              aria-label={isRecordingMixed ? 'Stop recording mixed session' : 'Record Mixed Session'}
-              className={`group relative z-10 flex h-24 w-24 items-center justify-center rounded-full border shadow-2xl transition-all duration-300 focus:outline-none focus:ring-4 cursor-pointer ${
-                isRecordingMixed
-                  ? 'border-red-500/40 bg-red-600 text-white shadow-red-500/40 hover:bg-red-700 focus:ring-red-500/30 active:scale-95'
-                  : 'border-zinc-700 bg-zinc-900 text-zinc-100 hover:scale-105 hover:bg-zinc-800 focus:ring-violet-500/30 active:scale-95 shadow-violet-500/10'
-              }`}
-            >
-              {isRecordingMixed ? (
-                <div className="h-7 w-7 rounded-md bg-white transition-transform group-hover:scale-95" />
-              ) : (
-                <div className="h-7 w-7 rounded-full bg-red-500 transition-transform group-hover:scale-110 shadow-[0_0_12px_rgba(239,68,68,0.8)]" />
-              )}
-            </button>
-          </div>
-
-          <div className="mt-5 flex flex-col items-center gap-1.5">
+      {/* Mixed Take Review & AI Bay Trigger Section (if recorded) */}
+      {mixedAudioUrl && (
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/70 p-4 space-y-3 shadow-lg">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span
-                className={`h-2 w-2 rounded-full transition-colors ${
-                  isRecordingMixed ? 'animate-pulse bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-zinc-600'
-                }`}
-              />
-              <span className="text-sm font-semibold tracking-wide text-zinc-200">
-                {isRecordingMixed
-                  ? 'Recording Mixed Master (All Peers)...'
-                  : mixedAudioUrl
-                    ? 'Mixed Take Captured'
-                    : 'Ready to Record Mixed Session'}
+              <span className="text-xs font-semibold text-zinc-200">
+                Mixed Master Take
+              </span>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wider border border-emerald-500/20">
+                Merged Stream
               </span>
             </div>
-
-            {isRecordingMixed ? (
-              <span className="font-mono text-2xl font-bold tracking-tight text-red-500">
-                {formatTime(recordingTime)}
-              </span>
-            ) : (
-              <span className="text-xs text-zinc-400">
-                {mixedAudioUrl
-                  ? 'Open in Mastering Bay or review playback below'
-                  : 'Captures all participant audio into a single destination stream'}
+            {mixedAudioBlob && (
+              <span className="text-[10px] font-mono text-zinc-400">
+                {formatBytes(mixedAudioBlob.size)} • {mixedAudioBlob.type || 'audio/webm'}
               </span>
             )}
+          </div>
+
+          {/* Custom Audio Player replacing native player */}
+          <CustomAudioPlayer
+            src={mixedAudioUrl}
+            showReset={true}
+            className="bg-zinc-900/60"
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                id="btn-open-mastering-bay"
+                onClick={() =>
+                  mixedAudioBlob &&
+                  onOpenMastering?.(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
+                }
+                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow hover:bg-violet-500 transition-all cursor-pointer"
+              >
+                <Sliders className="h-3.5 w-3.5" />
+                <span>Open in Mastering Bay</span>
+              </button>
+
+              <button
+                type="button"
+                id="btn-save-ai"
+                disabled={isSaving}
+                onClick={handleSaveAndTranscribe}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isSaving ? 'Processing...' : savedRecordId ? '✓ Saved' : 'Quick Save'}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs">
+              <a
+                href={mixedAudioUrl}
+                download={`timbre-multiplayer-${activeRoomKey}.webm`}
+                className="font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Download</span>
+              </a>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="font-medium text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Mixed Session Playback & Action Section */}
-        {mixedAudioUrl && (
-          <div className="relative mt-6 rounded-2xl border border-zinc-800/80 bg-zinc-950/70 p-5 transition-all space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold tracking-tight text-zinc-200">
-                  Mixed Session Recording
-                </span>
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
-                  Master Mix
-                </span>
-              </div>
-              {mixedAudioBlob && (
-                <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono">
-                  <span>{formatBytes(mixedAudioBlob.size)}</span>
-                  <span>•</span>
-                  <span>{mixedAudioBlob.type || 'audio/webm'}</span>
-                </div>
-              )}
-            </div>
+      {/* Step 3: Fixed Control Bar localized strictly to the bottom of the Multiplayer component */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center gap-4 rounded-full border border-zinc-800/90 bg-zinc-900/90 px-6 py-3 shadow-2xl backdrop-blur-xl pointer-events-auto">
+        {/* Mute Mic Button */}
+        <button
+          type="button"
+          id="btn-multi-mute"
+          onClick={handleToggleMute}
+          title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          className={`group flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all cursor-pointer shadow-sm ${
+            isMuted
+              ? 'bg-red-500/20 text-red-400 border border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+              : 'bg-zinc-800 text-zinc-300 border border-zinc-700/60 hover:bg-zinc-700 hover:text-white'
+          }`}
+        >
+          {isMuted ? (
+            <MicOff className="h-4 w-4 text-red-400" />
+          ) : (
+            <Mic className="h-4 w-4 text-zinc-300 group-hover:text-white" />
+          )}
+          <span>{isMuted ? 'Mic Muted' : 'Mute Mic'}</span>
+        </button>
 
-            {/* Native HTML audio playback element */}
-            <audio
-              src={mixedAudioUrl}
-              controls
-              className="w-full rounded-xl outline-none"
-            />
+        {/* Record Mix Primary Button */}
+        <div className="relative flex items-center gap-2">
+          {isRecordingMixed && (
+            <span className="font-mono text-xs font-bold text-red-500 animate-pulse pl-1">
+              {formatTime(recordingTime)}
+            </span>
+          )}
 
-            {/* Mastering & AI Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-800/80">
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                {/* Mastering & AI Bay Button */}
-                <button
-                  type="button"
-                  id="btn-open-mastering-bay"
-                  onClick={() =>
-                    mixedAudioBlob &&
-                    onOpenMastering?.(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
-                  }
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-600/30 hover:bg-violet-500 transition-all cursor-pointer"
-                >
-                  <Sliders className="h-3.5 w-3.5" />
-                  <span>Mastering & AI Bay</span>
-                </button>
-
-                <button
-                  type="button"
-                  id="btn-save-ai"
-                  disabled={isSaving}
-                  onClick={handleSaveAndTranscribe}
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs font-semibold text-zinc-200 shadow-sm hover:bg-zinc-800 transition-all disabled:opacity-60 cursor-pointer"
-                >
-                  {isSaving ? (
-                    <>
-                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>{savingStatus || 'Processing...'}</span>
-                    </>
-                  ) : savedRecordId ? (
-                    <span>✓ Saved to Vault</span>
-                  ) : (
-                    <span>⚡ Quick Transcribe & Save</span>
-                  )}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-4 text-xs">
-                <a
-                  href={mixedAudioUrl}
-                  download={`timbre-multiplayer-${activeRoomKey}.webm`}
-                  className="font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="font-medium text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            {/* Inline Transcript & Summary view */}
-            {(summary || transcript) && (
-              <div className="mt-4 space-y-3.5 border-t border-zinc-800/80 pt-4">
-                {savedRecordId && (
-                  <div className="flex items-center justify-between rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 text-xs text-emerald-400 font-medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">✓</span>
-                      <span>Persisted to Phoenix SQLite Vault</span>
-                    </div>
-                    <span className="font-mono text-[10px] text-emerald-500/80">
-                      ID: {savedRecordId.substring(0, 14)}...
-                    </span>
-                  </div>
-                )}
-
-                {summary && (
-                  <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 p-4 text-left">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-violet-300 block mb-1">
-                      🤖 AI Summary (GPT-OSS-20B)
-                    </span>
-                    <p className="text-xs text-zinc-200 leading-relaxed font-sans">
-                      {summary}
-                    </p>
-                  </div>
-                )}
-
-                {transcript && (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 text-left">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300 block mb-1">
-                      📝 Full Audio Transcript (Whisper-large-v3)
-                    </span>
-                    <p className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap font-sans">
-                      {transcript}
-                    </p>
-                  </div>
-                )}
-              </div>
+          <button
+            type="button"
+            id="record-mixed-toggle-button"
+            onClick={isRecordingMixed ? stopMixedRecording : startMixedRecording}
+            aria-label={isRecordingMixed ? 'Stop recording mixed session' : 'Record Mixed Session'}
+            className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-bold transition-all shadow-xl cursor-pointer ${
+              isRecordingMixed
+                ? 'bg-red-600 text-white shadow-red-500/40 hover:bg-red-700 active:scale-95 animate-pulse'
+                : 'bg-violet-600 text-white shadow-violet-600/40 hover:bg-violet-500 active:scale-95 hover:shadow-violet-600/60'
+            }`}
+          >
+            {isRecordingMixed ? (
+              <>
+                <Square className="h-4 w-4 fill-current" />
+                <span>Stop Mix</span>
+              </>
+            ) : (
+              <>
+                <Disc className="h-4 w-4 fill-current" />
+                <span>Record Mix</span>
+              </>
             )}
-          </div>
-        )}
+          </button>
+        </div>
       </div>
     </div>
   )
