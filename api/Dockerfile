@@ -27,9 +27,9 @@ RUN mix compile
 RUN mix release
 
 # Production runner stage
-FROM alpine:3.21 AS runner
+FROM alpine:3.23.5 AS runner
 
-RUN apk add --no-cache libstdc++ ncurses-libs sqlite sqlite-libs ca-certificates
+RUN apk add --no-cache openssl libgcc libstdc++ ncurses-libs
 
 WORKDIR /app
 
