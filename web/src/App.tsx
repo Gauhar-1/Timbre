@@ -107,7 +107,7 @@ export default function App() {
 
   // Sleek segmented pill mode switcher (Solo Studio vs Multiplayer Live Mixer)
   const modeSwitcher = (
-    <div className="inline-flex rounded-xl border border-zinc-800/80 bg-zinc-900/70 p-1 shadow-sm backdrop-blur-md">
+    <div className="inline-flex w-full sm:w-auto overflow-x-auto justify-center rounded-xl border border-zinc-800/80 bg-zinc-900/70 p-1 shadow-sm backdrop-blur-md">
       <button
         type="button"
         id="tab-solo-recorder"
@@ -195,6 +195,7 @@ export default function App() {
         onClose={() => setIsMasteringOpen(false)}
         audioBlob={masteringSession?.blob || null}
         recordingType={masteringSession?.recordingType || 'solo'}
+        recording_type={masteringSession?.recordingType || 'solo'}
         durationMs={masteringSession?.durationMs || 0}
         roomId={masteringSession?.roomId}
         onOpenVault={() => {

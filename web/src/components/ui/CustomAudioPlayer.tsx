@@ -17,7 +17,7 @@ export const CustomAudioPlayer: React.FC<CustomAudioPlayerProps> = ({
   blob,
   className = '',
   autoPlay = false,
-  showVolume = false,
+  showVolume = true,
   showReset = true,
   onEnded,
   onTimeUpdate,
@@ -26,6 +26,7 @@ export const CustomAudioPlayer: React.FC<CustomAudioPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [volume, setVolume] = useState(1.0)
   const [isMuted, setIsMuted] = useState(false)
   const [isSeeking, setIsSeeking] = useState(false)
   const [internalUrl, setInternalUrl] = useState<string | null>(null)
@@ -100,11 +101,30 @@ export const CustomAudioPlayer: React.FC<CustomAudioPlayerProps> = ({
     }
   }
 
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value)
+    setVolume(val)
+    if (audioRef.current) {
+      audioRef.current.volume = val
+      if (val === 0) {
+        setIsMuted(true)
+        audioRef.current.muted = true
+      } else if (isMuted) {
+        setIsMuted(false)
+        audioRef.current.muted = false
+      }
+    }
+  }
+
   const handleVolumeToggle = () => {
     if (!audioRef.current) return
     const nextMuted = !isMuted
     setIsMuted(nextMuted)
     audioRef.current.muted = nextMuted
+    if (!nextMuted && volume === 0) {
+      setVolume(1.0)
+      audioRef.current.volume = 1.0
+    }
   }
 
   const handleTimeUpdate = useCallback(() => {
@@ -195,29 +215,52 @@ export const CustomAudioPlayer: React.FC<CustomAudioPlayerProps> = ({
         </div>
       </div>
 
-      {/* Auxiliary Controls */}
-      <div className="flex items-center gap-1.5 pl-1 border-l border-zinc-800/80">
+      {/* Volume Control Slider & Auxiliary Actions on the right side of control bar */}
+      <div className="flex items-center gap-2 pl-2 border-l border-zinc-800/80 shrink-0">
+        {showVolume && (
+          <>
+            <button
+              type="button"
+              onClick={handleVolumeToggle}
+              disabled={!audioSrc}
+              title={isMuted || volume === 0 ? 'Unmute' : 'Mute'}
+              aria-label={isMuted || volume === 0 ? 'Unmute' : 'Mute'}
+              className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors disabled:opacity-30 cursor-pointer"
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX className="h-4 w-4 text-red-400" />
+              ) : (
+                <Volume2 className="h-4 w-4 text-violet-400" />
+              )}
+            </button>
+
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={isMuted ? 0 : volume}
+              onChange={handleVolumeChange}
+              disabled={!audioSrc}
+              aria-label="Volume slider"
+              className="w-16 sm:w-20 h-1.5 bg-zinc-800 rounded-lg cursor-pointer accent-violet-500 hover:accent-violet-400 focus:outline-none transition-all disabled:opacity-40"
+              style={{
+                background: `linear-gradient(to right, #8b5cf6 0%, #8b5cf6 ${(isMuted ? 0 : volume) * 100}%, #27272a ${(isMuted ? 0 : volume) * 100}%, #27272a 100%)`,
+              }}
+            />
+          </>
+        )}
+
         {showReset && (
           <button
             type="button"
             onClick={handleReset}
             disabled={!audioSrc || currentTime === 0}
             title="Reset to beginning"
+            aria-label="Reset to beginning"
             className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors disabled:opacity-30 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-        )}
-
-        {showVolume && (
-          <button
-            type="button"
-            onClick={handleVolumeToggle}
-            disabled={!audioSrc}
-            title={isMuted ? 'Unmute' : 'Mute'}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors disabled:opacity-30 cursor-pointer"
-          >
-            {isMuted ? <VolumeX className="h-4 w-4 text-red-400" /> : <Volume2 className="h-4 w-4 text-violet-400" />}
           </button>
         )}
       </div>

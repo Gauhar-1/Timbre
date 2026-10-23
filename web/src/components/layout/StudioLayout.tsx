@@ -44,8 +44,8 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
 
         {/* Right Pane: Main Studio Workspace & Header */}
         <div className="flex flex-col h-full overflow-hidden min-w-0 relative z-10">
-        {/* Top Navbar: Slim, semi-transparent header */}
-        <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-zinc-800/60 bg-[#09090b]/80 px-4 sm:px-6 backdrop-blur-md">
+        {/* Top Navbar: Responsive mobile wrap and scaling header */}
+        <header className="relative z-20 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 p-4 border-b border-zinc-800/60 bg-[#09090b]/80 backdrop-blur-md shrink-0">
           {/* Left: Mobile Vault Toggle Button & Project Branding */}
           <div className="flex items-center gap-2.5 sm:gap-3">
             {/* Mobile Vault drawer button */}
@@ -78,7 +78,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
 
           {/* Center: Navigation Actions slot (Solo vs Multiplayer switcher) */}
           {navActions && (
-            <div className="flex items-center">
+            <div className="flex items-center justify-center w-full sm:w-auto overflow-x-auto">
               {navActions}
             </div>
           )}

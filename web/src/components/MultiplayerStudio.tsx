@@ -18,12 +18,10 @@ import { useWebRTCMixer } from '../hooks/useWebRTCMixer'
 import { AudioWaveform } from './AudioWaveform'
 import { CustomAudioPlayer } from './ui/CustomAudioPlayer'
 import {
-  transcribeAudio,
-  summarizeText,
-  saveRecordingToDatabase,
   getGroqApiKey,
   setGroqApiKey,
 } from '../services/ai'
+import { MasteringBay } from './mastering/MasteringBay'
 import { copyInviteLink, getUrlRoomId } from '../services/client'
 
 export interface MultiplayerStudioProps {
@@ -62,10 +60,8 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   // Local Microphone Mute state
   const [isMuted, setIsMuted] = useState(false)
 
-  // AI Pipeline & Persistence states
-  const [isSaving, setIsSaving] = useState(false)
-  const [savedRecordId, setSavedRecordId] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  // Step 3 Bug Fix: Local MasteringBay trigger state
+  const [isMasteringOpen, setIsMasteringOpen] = useState(false)
 
   // Copy toast state
   const [copiedInvite, setCopiedInvite] = useState(false)
@@ -88,14 +84,27 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
     })
   }
 
-  // Track recording transition to trigger Mastering Bay
+  // Step 3: Pass merged Blob into MasteringBay upon recording completion
   const wasRecordingMixedRef = useRef(false)
   useEffect(() => {
     if (wasRecordingMixedRef.current && !isRecordingMixed && mixedAudioBlob) {
-      onRecordingFinished?.(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
+      if (onRecordingFinished) {
+        onRecordingFinished(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
+      } else {
+        setIsMasteringOpen(true)
+      }
     }
     wasRecordingMixedRef.current = isRecordingMixed
   }, [isRecordingMixed, mixedAudioBlob, recordingTime, activeRoomKey, onRecordingFinished])
+
+  const handleOpenMastering = () => {
+    if (!mixedAudioBlob) return
+    if (onOpenMastering) {
+      onOpenMastering(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
+    } else {
+      setIsMasteringOpen(true)
+    }
+  }
 
   const handleKeySave = (val: string) => {
     const trimmed = val.trim()
@@ -112,41 +121,8 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
   }
 
   const handleReset = () => {
-    setSavedRecordId(null)
-    setSaveError(null)
+    setIsMasteringOpen(false)
     resetBaseRecording()
-  }
-
-  // Direct Transcribe, Summarize, and Save fallback
-  const handleSaveAndTranscribe = async () => {
-    if (!mixedAudioBlob) return
-
-    try {
-      setIsSaving(true)
-      setSaveError(null)
-
-      const transcribedText = await transcribeAudio(mixedAudioBlob, groqKey)
-      const summaryText = await summarizeText(transcribedText, groqKey)
-
-      const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      const record = await saveRecordingToDatabase({
-        audioBlob: mixedAudioBlob,
-        title: `Multiplayer Session (${timestampStr})`,
-        durationMs: recordingTime * 1000,
-        transcript: transcribedText,
-        summary: summaryText,
-        recordingType: 'merged',
-        clientId: localPeerId,
-        roomId: channelTopic,
-      })
-
-      setSavedRecordId(record.id)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Transcription/saving failed'
-      setSaveError(msg)
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   const formatTime = (seconds: number) => {
@@ -308,10 +284,10 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
         </div>
 
         {/* Error notification banner */}
-        {(error || saveError) && (
+        {error && (
           <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-center text-xs font-medium text-red-400 flex items-center justify-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error || saveError}</span>
+            <span>{error}</span>
           </div>
         )}
       </div>
@@ -409,24 +385,11 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
               <button
                 type="button"
                 id="btn-open-mastering-bay"
-                onClick={() =>
-                  mixedAudioBlob &&
-                  onOpenMastering?.(mixedAudioBlob, recordingTime * 1000, activeRoomKey)
-                }
-                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow hover:bg-violet-500 transition-all cursor-pointer"
+                onClick={handleOpenMastering}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-600/30 hover:bg-violet-500 transition-all cursor-pointer"
               >
                 <Sliders className="h-3.5 w-3.5" />
                 <span>Open in Mastering Bay</span>
-              </button>
-
-              <button
-                type="button"
-                id="btn-save-ai"
-                disabled={isSaving}
-                onClick={handleSaveAndTranscribe}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 transition-all disabled:opacity-50 cursor-pointer"
-              >
-                {isSaving ? 'Processing...' : savedRecordId ? '✓ Saved' : 'Quick Save'}
               </button>
             </div>
 
@@ -506,6 +469,18 @@ export const MultiplayerStudio: React.FC<MultiplayerStudioProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Step 3: Standalone MasteringBay component handoff if not mounted under App-level modal */}
+      {!onOpenMastering && !onRecordingFinished && (
+        <MasteringBay
+          isOpen={isMasteringOpen}
+          onClose={() => setIsMasteringOpen(false)}
+          audioBlob={mixedAudioBlob}
+          recording_type="merged"
+          durationMs={recordingTime * 1000}
+          roomId={activeRoomKey}
+        />
+      )}
     </div>
   )
 }
