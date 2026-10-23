@@ -98,7 +98,7 @@ export async function summarizeText(transcript: string, apiKeyOverride?: string)
         },
       ],
       temperature: 0.5,
-      max_tokens: 180,
+      max_tokens: 500
     }),
   })
 
