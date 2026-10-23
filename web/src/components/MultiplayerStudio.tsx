@@ -1,5 +1,6 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useWebRTCMixer } from '../hooks/useWebRTCMixer'
+import { AudioWaveform } from './AudioWaveform'
 import {
   transcribeAudio,
   summarizeText,
@@ -8,76 +9,12 @@ import {
   setGroqApiKey,
 } from '../services/ai'
 
-// Sub-component to manage each remote audio stream playback safely
-const RemoteStreamPlayer: React.FC<{ stream: MediaStream; index: number }> = ({ stream, index }) => {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [volume, setVolume] = useState<number>(0.05) // Default to 5% volume to prevent feedback
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.srcObject = stream
-      audioRef.current.volume = volume
-    }
-  }, [stream, volume])
-
-  return (
-    <div className="flex items-center justify-between rounded-xl border border-hairline bg-canvas p-3.5 shadow-xs transition-all">
-      <div className="flex items-center gap-3">
-        {/* Animated Audio Visualizer */}
-        <div className="flex items-end gap-1 h-5 w-6 px-1 py-0.5 rounded bg-emerald-500/10">
-          <span
-            className="w-1 bg-emerald-500 rounded-full animate-pulse h-full"
-            style={{ animationDelay: '0ms' }}
-          />
-          <span
-            className="w-1 bg-emerald-500 rounded-full animate-pulse h-3/4"
-            style={{ animationDelay: '150ms' }}
-          />
-          <span
-            className="w-1 bg-emerald-500 rounded-full animate-pulse h-1/2"
-            style={{ animationDelay: '300ms' }}
-          />
-        </div>
-
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ink">Peer Stream #{index + 1}</span>
-            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600 uppercase">
-              Live
-            </span>
-          </div>
-          <span className="font-mono text-[10px] text-mute truncate max-w-[150px]">
-            {stream.id}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-medium text-mute">Vol (anti-feedback):</span>
-        <input
-          type="range"
-          min="0"
-          max="0.2"
-          step="0.01"
-          value={volume}
-          onChange={(e) => setVolume(parseFloat(e.target.value))}
-          className="w-16 h-1 bg-hairline rounded cursor-pointer accent-emerald-500"
-          title="Kept low to avoid acoustic feedback on local speakers"
-        />
-        <span className="font-mono text-[10px] text-mute w-6">{Math.round(volume * 100)}%</span>
-
-        {/* Step 3: Render native <audio autoPlay playsInline> element */}
-        <audio ref={audioRef} autoPlay playsInline />
-      </div>
-    </div>
-  )
-}
-
 export const MultiplayerStudio: React.FC = () => {
   const {
     localPeerId,
     connectedPeers,
     remoteStreams,
+    localStream,
     isRoomConnected,
     isRecordingMixed,
     recordingTime,
@@ -297,25 +234,45 @@ export const MultiplayerStudio: React.FC = () => {
           </div>
         </div>
 
-        {/* Remote Audio Streams Monitor Panel */}
-        {remoteStreams.length > 0 && (
-          <div className="relative mt-4 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-mute">
-                Incoming Audio Streams ({remoteStreams.length})
-              </span>
-              <span className="text-[10px] text-mute italic">
-                Acoustic feedback limiter active (volume &le; 20%)
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {remoteStreams.map((stream, idx) => (
-                <RemoteStreamPlayer key={stream.id} stream={stream} index={idx} />
-              ))}
-            </div>
+        {/* Center Stage HTML5 Canvas Waveform Grid */}
+        <div className="relative mt-6 space-y-3">
+          <div className="flex items-center justify-between border-b border-hairline pb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink flex items-center gap-1.5">
+              <span>📊</span> Live Waveforms ({remoteStreams.length + 1})
+            </span>
+            <span className="text-[10px] text-mute font-mono">
+              HTML5 Canvas • Violet Glow
+            </span>
           </div>
-        )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* Local Microphone Waveform */}
+            <AudioWaveform
+              stream={localStream}
+              isActive={true}
+              isLocal={true}
+              label={`You (${localPeerId})`}
+              sublabel="Host • Local Mic"
+            />
+
+            {/* Remote WebRTC Streams Waveforms */}
+            {remoteStreams.map((stream, idx) => (
+              <AudioWaveform
+                key={stream.id}
+                stream={stream}
+                isActive={true}
+                label={`Peer Stream #${idx + 1}`}
+                sublabel={connectedPeers[idx] || stream.id}
+              />
+            ))}
+          </div>
+
+          {remoteStreams.length === 0 && (
+            <div className="text-center py-1 text-[11px] text-mute italic">
+              Open this studio in a second tab to connect additional live waveforms.
+            </div>
+          )}
+        </div>
 
         {/* Central Record Mixed Session Interactive Area */}
         <div className="relative my-8 flex flex-col items-center justify-center">

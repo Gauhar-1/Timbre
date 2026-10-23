@@ -5,6 +5,7 @@ export interface UseWebRTCMixerReturn {
   localPeerId: string
   connectedPeers: string[]
   remoteStreams: MediaStream[]
+  localStream: MediaStream | null
   isRoomConnected: boolean
   isRecordingMixed: boolean
   recordingTime: number
@@ -36,6 +37,7 @@ export function useWebRTCMixer(roomId = 'room:lobby'): UseWebRTCMixerReturn {
   )
   const [connectedPeers, setConnectedPeers] = useState<string[]>([])
   const [remoteStreams, setRemoteStreams] = useState<MediaStream[]>([])
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [isRoomConnected, setIsRoomConnected] = useState(false)
   const [isRecordingMixed, setIsRecordingMixed] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
@@ -174,6 +176,7 @@ export function useWebRTCMixer(roomId = 'room:lobby'): UseWebRTCMixerReturn {
           return
         }
         localStreamRef.current = stream
+        setLocalStream(stream)
 
         // 2. Setup master AudioContext mixer
         const { audioCtx, mixerDest } = getOrCreateMixer()
@@ -338,6 +341,7 @@ export function useWebRTCMixer(roomId = 'room:lobby'): UseWebRTCMixerReturn {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop())
       }
+      setLocalStream(null)
 
       // Close master AudioContext
       if (audioContextRef.current) {
@@ -427,6 +431,7 @@ export function useWebRTCMixer(roomId = 'room:lobby'): UseWebRTCMixerReturn {
     localPeerId,
     connectedPeers,
     remoteStreams,
+    localStream,
     isRoomConnected,
     isRecordingMixed,
     recordingTime,
