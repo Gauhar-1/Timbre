@@ -11,6 +11,7 @@ import {
   Database,
   X,
   Cpu,
+  AlertTriangle,
 } from 'lucide-react'
 import { CustomAudioPlayer } from '../CustomAudioPlayer'
 import { processAudio, DspEffect } from '../../services/dsp'
@@ -66,6 +67,7 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
 
   const [groqKey, setGroqKey] = useState<string>('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [savedResult, setSavedResult] = useState<{
     id: string
     title: string
@@ -96,6 +98,7 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
       setTitleText('')
       setSavedResult(null)
       setErrorMsg(null)
+      setToastMessage(null)
       setGroqKey(getGroqApiKey())
 
       return () => {
@@ -119,6 +122,13 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
       setGroqKey(getGroqApiKey())
     }
   }, [isOpen])
+
+  // Auto-dismiss toast notification after 5 seconds
+  useEffect(() => {
+    if (!toastMessage) return
+    const timer = window.setTimeout(() => setToastMessage(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [toastMessage])
 
   // Handle DSP Effect application via Rust WASM
   const handleSelectEffect = async (effect: DspEffect) => {
@@ -172,8 +182,11 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
       const text = await transcribeAudio(activeBlobToSave, key)
       setTranscriptText(text)
     } catch (err: unknown) {
+      setIsTranscribing(false)
       const msg = err instanceof Error ? err.message : 'Transcription failed'
-      setErrorMsg(msg)
+      const displayMsg = msg.includes('AI generation failed') ? msg : `AI generation failed: ${msg}`
+      setErrorMsg(displayMsg)
+      setToastMessage(displayMsg)
     } finally {
       setIsTranscribing(false)
     }
@@ -193,8 +206,11 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
         setTitleText(title)
       }
     } catch (err: unknown) {
+      setIsSummarizing(false)
       const msg = err instanceof Error ? err.message : 'Summarization failed'
-      setErrorMsg(msg)
+      const displayMsg = msg.includes('AI generation failed') ? msg : `AI generation failed: ${msg}`
+      setErrorMsg(displayMsg)
+      setToastMessage(displayMsg)
     } finally {
       setIsSummarizing(false)
     }
@@ -264,6 +280,30 @@ export const MasteringModalOrDrawer: React.FC<MasteringModalProps> = ({
           onClick={!isBusy ? onClose : undefined}
           className="fixed inset-0 bg-black/80 backdrop-blur-md"
         />
+
+        {/* Floating Toast Notification for AI errors */}
+        <AnimatePresence>
+          {toastMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              role="alert"
+              data-testid="ai-toast-notification"
+              className="fixed top-6 right-6 z-[250] flex max-w-sm items-center gap-3 rounded-2xl border border-red-500/40 bg-zinc-950/95 px-4 py-3 text-xs text-red-200 shadow-2xl backdrop-blur-xl"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
+              <div className="flex-1 font-medium">{toastMessage}</div>
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="text-zinc-400 hover:text-zinc-200 cursor-pointer ml-1 text-sm leading-none"
+              >
+                ✕
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Modal Dialog Card */}
         <motion.div

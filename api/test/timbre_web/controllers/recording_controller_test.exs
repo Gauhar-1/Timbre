@@ -105,7 +105,7 @@ defmodule TimbreWeb.RecordingControllerTest do
                "duration_ms" => 4200
              } = json_response(conn, 201)
 
-      saved = Recordings.get_recording(id)
+      saved = Recordings.get_recording(id, "peer-test-1")
       assert saved.audio_blob == @sample_binary
       assert saved.recording_type == "merged"
     end
@@ -120,7 +120,11 @@ defmodule TimbreWeb.RecordingControllerTest do
     test "serves raw audio binary with Accept-Ranges and Content-Type headers", %{conn: conn} do
       recording = fixture(:recording)
 
-      conn = get(conn, ~p"/api/recordings/#{recording.id}/audio")
+      conn =
+        conn
+        |> put_req_header("x-client-id", recording.client_id)
+        |> get(~p"/api/recordings/#{recording.id}/audio")
+
       assert response(conn, 200) == @sample_binary
       assert get_resp_header(conn, "content-type") == ["audio/webm"]
       assert get_resp_header(conn, "accept-ranges") == ["bytes"]
@@ -132,6 +136,7 @@ defmodule TimbreWeb.RecordingControllerTest do
 
       conn =
         conn
+        |> put_req_header("x-client-id", recording.client_id)
         |> put_req_header("range", "bytes=0-3")
         |> get(~p"/api/recordings/#{recording.id}/audio")
 
@@ -142,8 +147,45 @@ defmodule TimbreWeb.RecordingControllerTest do
 
     test "returns 404 when recording does not exist", %{conn: conn} do
       fake_id = "00000000-0000-0000-0000-000000000000"
-      conn = get(conn, ~p"/api/recordings/#{fake_id}/audio")
+      conn = get(conn, ~p"/api/recordings/#{fake_id}/audio?client_id=user-123")
       assert json_response(conn, 404)["error"] == "Recording not found"
+    end
+
+    test "regression (IDOR): returns 404 Not Found when User A attempts to GET User B's recording",
+         %{
+           conn: conn
+         } do
+      user_b_recording =
+        fixture(:recording, %{client_id: "user_b", title: "User B Confidential Recording"})
+
+      # 1. User A attempts to GET User B's recording using User A's client_id header
+      conn_user_a_header =
+        conn
+        |> put_req_header("x-client-id", "user_a")
+        |> get(~p"/api/recordings/#{user_b_recording.id}/audio")
+
+      assert response(conn_user_a_header, 404)
+      assert json_response(conn_user_a_header, 404)["error"] == "Recording not found"
+
+      # 2. User A attempts to GET User B's recording using User A's client_id query param
+      conn_user_a_param =
+        get(conn, ~p"/api/recordings/#{user_b_recording.id}/audio?client_id=user_a")
+
+      assert response(conn_user_a_param, 404)
+      assert json_response(conn_user_a_param, 404)["error"] == "Recording not found"
+
+      # 3. Unauthenticated request without client_id header or param also returns 404
+      conn_anon = get(conn, ~p"/api/recordings/#{user_b_recording.id}/audio")
+      assert response(conn_anon, 404)
+      assert json_response(conn_anon, 404)["error"] == "Recording not found"
+
+      # 4. User B can legitimately access their own recording
+      conn_user_b =
+        conn
+        |> put_req_header("x-client-id", "user_b")
+        |> get(~p"/api/recordings/#{user_b_recording.id}/audio")
+
+      assert response(conn_user_b, 200) == @sample_binary
     end
   end
 end

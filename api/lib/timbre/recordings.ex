@@ -1,6 +1,8 @@
 defmodule Timbre.Recordings do
   @moduledoc """
   The Recordings context. Manages audio recording persistence and retrieval.
+  Enforces strict tenant isolation on all get, update, and delete operations
+  to eliminate Insecure Direct Object References (IDOR).
   """
 
   import Ecto.Query, warn: false
@@ -45,14 +47,26 @@ defmodule Timbre.Recordings do
   defp filter_by_client(query, client_id), do: where(query, [r], r.client_id == ^client_id)
 
   @doc """
-  Gets a single recording by id.
+  Gets a single recording by id and client_id.
+  Strictly enforces tenant ownership: never queries by id alone.
+  Returns nil if client_id is nil, empty, or if no matching recording belongs to client_id.
   """
-  def get_recording(id), do: Repo.get(Recording, id)
+  def get_recording(_id, client_id) when client_id in [nil, ""], do: nil
+
+  def get_recording(id, client_id) do
+    Repo.get_by(Recording, id: id, client_id: client_id)
+  end
 
   @doc """
-  Gets a single recording by id, raising Ecto.NoResultsError if not found.
+  Gets a single recording by id and client_id, raising Ecto.NoResultsError if not found.
   """
-  def get_recording!(id), do: Repo.get!(Recording, id)
+  def get_recording!(id, client_id) when is_binary(client_id) and client_id != "" do
+    Repo.get_by!(Recording, id: id, client_id: client_id)
+  end
+
+  def get_recording!(_id, _client_id) do
+    raise Ecto.NoResultsError, queryable: Recording
+  end
 
   @doc """
   Creates a recording.
@@ -64,8 +78,41 @@ defmodule Timbre.Recordings do
   end
 
   @doc """
-  Deletes a recording.
+  Updates a recording enforcing tenant isolation.
   """
+  def update_recording(%Recording{client_id: client_id} = recording, attrs)
+      when is_binary(client_id) and client_id != "" do
+    recording
+    |> Recording.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def update_recording(id, client_id, attrs) do
+    case get_recording(id, client_id) do
+      nil -> {:error, :not_found}
+      %Recording{} = recording -> update_recording(recording, attrs)
+    end
+  end
+
+  @doc """
+  Deletes a recording by id and client_id, enforcing ownership.
+  """
+  def delete_recording(id, client_id) when is_binary(id) do
+    case get_recording(id, client_id) do
+      nil -> {:error, :not_found}
+      %Recording{} = recording -> Repo.delete(recording)
+    end
+  end
+
+  def delete_recording(%Recording{client_id: client_id} = recording, expected_client_id) do
+    if client_id == expected_client_id and is_binary(expected_client_id) and
+         expected_client_id != "" do
+      Repo.delete(recording)
+    else
+      {:error, :not_found}
+    end
+  end
+
   def delete_recording(%Recording{} = recording) do
     Repo.delete(recording)
   end

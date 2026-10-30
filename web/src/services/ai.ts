@@ -1,6 +1,7 @@
 /**
  * AI Service for Audio Transcription and Conversation Summarization.
- * Connects to Groq Whisper-large-v3 and openai/gpt-oss-20b endpoints.
+ * Connects to Groq Whisper-large-v3 and Llama chat completions.
+ * Enforces hard error boundaries with zero swallowed exceptions or canned fallbacks.
  */
 
 const GROQ_TRANSCRIPTION_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
@@ -32,16 +33,13 @@ export function setGroqApiKey(key: string): void {
 
 /**
  * Transcribes an audio Blob using the Groq Whisper-large-v3 model.
- * Falls back to high-fidelity simulated transcript if no API key is provided.
+ * Enforces strict error handling: rejects promise on API failures, 5xx errors, or missing key.
  */
 export async function transcribeAudio(audioBlob: Blob, apiKeyOverride?: string): Promise<string> {
   const apiKey = (apiKeyOverride || getGroqApiKey()).trim()
 
   if (!apiKey) {
-    // If no API key is set, provide a realistic fallback so the pipeline never breaks
-    console.info('No Groq API key found. Using demonstration transcription.')
-    await new Promise((resolve) => setTimeout(resolve, 800))
-    return 'Hello team, this is our multiplayer audio recording session. All microphones from connected peers are streaming over WebRTC mesh and actively mixed into a single unified stereo destination stream.'
+    throw new Error('No Groq API key configured. Please configure your Groq key in the studio header.')
   }
 
   // Prepare multipart/form-data for Groq Whisper
@@ -52,94 +50,49 @@ export async function transcribeAudio(audioBlob: Blob, apiKeyOverride?: string):
   formData.append('model', 'whisper-large-v3')
   formData.append('response_format', 'json')
 
-  const response = await fetch(GROQ_TRANSCRIPTION_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
-  })
+  try {
+    const response = await fetch(GROQ_TRANSCRIPTION_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Whisper transcription failed (${response.status}): ${errorText}`)
+    if (response.status >= 500) {
+      throw new Error(`AI generation failed: External AI API gateway error (${response.status}). Please try again.`)
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`Whisper transcription failed (${response.status}): ${errorText || response.statusText}`)
+    }
+
+    const data = (await response.json()) as { text?: string }
+    const text = data.text?.trim()
+    if (!text) {
+      throw new Error('Whisper returned empty transcript. No audible speech detected.')
+    }
+    return text
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Transcription failed due to a network or server error.'
+    throw new Error(msg)
   }
-
-  const data = (await response.json()) as { text?: string }
-  return data.text?.trim() || 'No audible speech detected.'
 }
 
 /**
- * Generates a concise, 2-sentence summary of the transcript using openai/gpt-oss-20b.
+ * Generates a concise summary of the transcript using Groq Llama chat completions.
+ * Enforces strict error boundaries with zero canned fallbacks.
  */
 export async function summarizeText(transcript: string, apiKeyOverride?: string): Promise<string> {
   const apiKey = (apiKeyOverride || getGroqApiKey()).trim()
 
   if (!apiKey) {
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    return 'The participants successfully established a real-time multiplayer WebRTC session and verified synchronous audio mixing. All voice channels were captured into a single track with clear acoustic balance.'
+    throw new Error('No Groq API key configured. Please configure your Groq key in the studio header.')
   }
 
-  const response = await fetch(GROQ_CHAT_COMPLETION_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'openai/gpt-oss-20b',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are an expert audio analyst. Provide a concise, professional summary of the provided conversation transcript. Do not output preamble or bullet points; output in coherent sentences.',
-        },
-        {
-          role: 'user',
-          content: `Here is the transcript to summarize:\n"${transcript}"`,
-        },
-      ],
-      temperature: 0.5,
-      max_tokens: 500
-    }),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`LLM summarization failed (${response.status}): ${errorText}`)
-  }
-
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
-  }
-
-  const summary = data.choices?.[0]?.message?.content?.trim()
-  return summary || 'Audio session completed with all participants contributing to the recording.'
-}
-
-export interface AiAnalysisResult {
-  title: string
-  summary: string
-}
-
-/**
- * Runs an LLM prompt that returns JSON:
- * { "title": "3-5 word smart title", "summary": "2-sentence executive summary" }
- */
-export async function generateTitleAndSummary(
-  transcript: string,
-  apiKeyOverride?: string
-): Promise<AiAnalysisResult> {
-  const apiKey = (apiKeyOverride || getGroqApiKey()).trim()
-
-  if (!apiKey) {
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    return {
-      title: `Studio Take [${timeStr}]`,
-      summary:
-        'The participants successfully recorded high-fidelity audio with active WebRTC monitoring and zero-clipping DSP processing.',
-    }
+  if (!transcript.trim()) {
+    throw new Error('No transcript provided to summarize.')
   }
 
   try {
@@ -150,7 +103,80 @@ export async function generateTitleAndSummary(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-20b',
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an expert audio analyst. Provide a concise, professional summary of the provided conversation transcript. Do not output preamble or bullet points; output in coherent sentences.',
+          },
+          {
+            role: 'user',
+            content: `Here is the transcript to summarize:\n"${transcript}"`,
+          },
+        ],
+        temperature: 0.5,
+        max_tokens: 500,
+      }),
+    })
+
+    if (response.status >= 500) {
+      throw new Error(`AI generation failed: External AI API gateway error (${response.status}). Please try again.`)
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`LLM summarization failed (${response.status}): ${errorText || response.statusText}`)
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+
+    const summary = data.choices?.[0]?.message?.content?.trim()
+    if (!summary) {
+      throw new Error('LLM summarization returned empty response.')
+    }
+    return summary
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Summarization failed due to a network or server error.'
+    throw new Error(msg)
+  }
+}
+
+export interface AiAnalysisResult {
+  title: string
+  summary: string
+}
+
+/**
+ * Runs an LLM prompt that returns JSON:
+ * { "title": "3-5 word smart title", "summary": "2-sentence executive summary" }
+ * Rejects promise with explicit error if API fails or returns 5xx.
+ */
+export async function generateTitleAndSummary(
+  transcript: string,
+  apiKeyOverride?: string
+): Promise<AiAnalysisResult> {
+  const apiKey = (apiKeyOverride || getGroqApiKey()).trim()
+
+  if (!apiKey) {
+    throw new Error('No Groq API key configured. Please configure your Groq key in the studio header.')
+  }
+
+  if (!transcript.trim()) {
+    throw new Error('No transcript provided to analyze.')
+  }
+
+  try {
+    const response = await fetch(GROQ_CHAT_COMPLETION_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
         messages: [
           {
             role: 'system',
@@ -168,14 +194,13 @@ export async function generateTitleAndSummary(
       }),
     })
 
+    if (response.status >= 500) {
+      throw new Error(`AI generation failed: External AI API gateway error (${response.status}). Please try again.`)
+    }
+
     if (!response.ok) {
-      const errorText = await response.text()
-      console.warn(`LLM title & summary failed (${response.status}): ${errorText}`)
-      const fallbackSummary = await summarizeText(transcript, apiKey)
-      return {
-        title: 'Studio Voice Session',
-        summary: fallbackSummary,
-      }
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`AI generation failed (${response.status}): ${errorText || response.statusText}`)
     }
 
     const data = (await response.json()) as {
@@ -184,21 +209,17 @@ export async function generateTitleAndSummary(
     const rawContent = data.choices?.[0]?.message?.content?.trim() || '{}'
     const parsed = JSON.parse(rawContent) as { title?: string; summary?: string }
 
+    if (!parsed.summary) {
+      throw new Error('AI analysis failed: Response missing valid summary.')
+    }
+
     return {
       title: parsed.title?.trim() || 'Studio Audio Take',
-      summary:
-        parsed.summary?.trim() ||
-        'The audio conversation was captured and transcribed successfully with pristine fidelity.',
+      summary: parsed.summary.trim(),
     }
-  } catch (err) {
-    console.warn('AI analysis error, falling back:', err)
-    const fallbackSummary = await summarizeText(transcript, apiKey).catch(
-      () => 'Session recorded and preserved in SQLite vault.'
-    )
-    return {
-      title: 'Studio Voice Session',
-      summary: fallbackSummary,
-    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'AI generation failed due to a network or server error.'
+    throw new Error(msg)
   }
 }
 
@@ -242,6 +263,7 @@ export async function saveRecordingToDatabase(params: {
 
   const response = await fetch(`${API_URL}/api/recordings`, {
     method: 'POST',
+    headers: clientId ? { 'x-client-id': clientId } : {},
     body: formData,
   })
 

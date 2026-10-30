@@ -19,5 +19,9 @@ defmodule TimbreWeb.Router do
     get "/recordings", RecordingController, :index
     post "/recordings", RecordingController, :create
     get "/recordings/:id/audio", RecordingController, :show
+    delete "/recordings/:id", RecordingController, :delete
+
+    post "/ai/transcribe", AIController, :transcribe
+    post "/ai/summarize", AIController, :summarize
   end
 end

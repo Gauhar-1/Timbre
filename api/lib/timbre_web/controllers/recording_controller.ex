@@ -84,11 +84,14 @@ defmodule TimbreWeb.RecordingController do
   @doc """
   Streams the raw audio binary with Content-Type and Accept-Ranges headers,
   enabling smooth seeking in HTML5 <audio> elements.
+  Enforces tenant isolation: requires authenticated client_id.
   """
-  def show(conn, %{"id" => id}) do
+  def show(conn, %{"id" => id} = params) do
+    current_client_id = get_current_client_id(conn, params)
+
     case Ecto.UUID.cast(id) do
       {:ok, valid_id} ->
-        case Recordings.get_recording(valid_id) do
+        case Recordings.get_recording(valid_id, current_client_id) do
           %Recording{} = recording ->
             serve_audio(conn, recording)
 
@@ -102,6 +105,58 @@ defmodule TimbreWeb.RecordingController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "Recording not found"})
+    end
+  end
+
+  @doc """
+  Deletes a recording. Enforces client ownership.
+  """
+  def delete(conn, %{"id" => id} = params) do
+    current_client_id = get_current_client_id(conn, params)
+
+    case Ecto.UUID.cast(id) do
+      {:ok, valid_id} ->
+        case Recordings.delete_recording(valid_id, current_client_id) do
+          {:ok, _recording} ->
+            send_resp(conn, :no_content, "")
+
+          {:error, :not_found} ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{error: "Recording not found"})
+
+          nil ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{error: "Recording not found"})
+        end
+
+      :error ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Recording not found"})
+    end
+  end
+
+  defp get_current_client_id(conn, params) do
+    case get_req_header(conn, "x-client-id") do
+      [client_id | _] when byte_size(client_id) > 0 ->
+        String.trim(client_id)
+
+      _ ->
+        case get_req_header(conn, "authorization") do
+          ["Bearer " <> token] when byte_size(token) > 0 ->
+            String.trim(token)
+
+          _ ->
+            case params["client_id"] do
+              val when is_binary(val) and byte_size(val) > 0 ->
+                String.trim(val)
+
+              _ ->
+                nil
+            end
+        end
     end
   end
 

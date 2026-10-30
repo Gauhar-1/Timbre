@@ -112,4 +112,78 @@ describe('MasteringBay AI State Machine & Sequential Pipeline', () => {
     const transcribeBtn = screen.getByTestId('btn-transcribe-groq')
     expect(transcribeBtn).toBeDisabled()
   })
+
+  it('explicitly clears loading state and displays error toast when transcription returns a 5xx error', async () => {
+    vi.mocked(aiService.transcribeAudio).mockRejectedValueOnce(
+      new Error('AI generation failed: External AI API gateway error (502). Please try again.')
+    )
+
+    render(
+      <MasteringBay
+        isOpen={true}
+        onClose={vi.fn()}
+        audioBlob={dummyBlob}
+        recordingType="solo"
+        durationMs={3000}
+      />
+    )
+
+    const transcribeBtn = screen.getByTestId('btn-transcribe-groq')
+    expect(transcribeBtn).not.toBeDisabled()
+
+    // Trigger transcription
+    fireEvent.click(transcribeBtn)
+
+    // Assert: error toast notification is displayed
+    await waitFor(() => {
+      const toast = screen.getByTestId('ai-toast-notification')
+      expect(toast).toBeInTheDocument()
+      expect(toast).toHaveTextContent(/AI generation failed: External AI API gateway error \(502\)/i)
+    })
+
+    // Assert: loading state is explicitly cleared (button is no longer loading / disabled by isTranscribing)
+    expect(transcribeBtn).not.toBeDisabled()
+    expect(screen.queryByText(/Transcribing Audio/i)).not.toBeInTheDocument()
+  })
+
+  it('explicitly clears loading state and displays error toast when summarization returns a 5xx error', async () => {
+    vi.mocked(aiService.generateTitleAndSummary).mockRejectedValueOnce(
+      new Error('AI generation failed: External AI API gateway error (502). Please try again.')
+    )
+
+    render(
+      <MasteringBay
+        isOpen={true}
+        onClose={vi.fn()}
+        audioBlob={dummyBlob}
+        recordingType="solo"
+        durationMs={3000}
+      />
+    )
+
+    // 1. Complete transcription first
+    const transcribeBtn = screen.getByTestId('btn-transcribe-groq')
+    fireEvent.click(transcribeBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Hello team, this is our test transcript from Groq Whisper./i)).toBeInTheDocument()
+    })
+
+    const summarizeBtn = screen.getByTestId('btn-summarize-llama')
+    expect(summarizeBtn).not.toBeDisabled()
+
+    // 2. Trigger summarization which fails with 502
+    fireEvent.click(summarizeBtn)
+
+    // Assert: error toast notification is displayed
+    await waitFor(() => {
+      const toast = screen.getByTestId('ai-toast-notification')
+      expect(toast).toBeInTheDocument()
+      expect(toast).toHaveTextContent(/AI generation failed: External AI API gateway error \(502\)/i)
+    })
+
+    // Assert: loading state is explicitly cleared
+    expect(summarizeBtn).not.toBeDisabled()
+    expect(screen.queryByText(/Summarizing/i)).not.toBeInTheDocument()
+  })
 })

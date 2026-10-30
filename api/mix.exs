@@ -10,6 +10,7 @@ defmodule Timbre.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      consolidate_protocols: Mix.env() == :prod,
       listeners: [Phoenix.CodeReloader]
     ]
   end

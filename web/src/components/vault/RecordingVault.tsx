@@ -295,7 +295,7 @@ export const RecordingVault: React.FC<RecordingVaultProps> = ({
 
                 {/* Custom Audio Player with streaming and seek */}
                 <CustomAudioPlayer
-                  src={`${API_URL}/api/recordings/${item.id}/audio`}
+                  src={`${API_URL}/api/recordings/${item.id}/audio?client_id=${encodeURIComponent(currentClientId)}`}
                   showVolume={false}
                   showReset={false}
                   className="px-2.5 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800/60 text-xs"
@@ -318,7 +318,7 @@ export const RecordingVault: React.FC<RecordingVaultProps> = ({
                   </button>
 
                   <a
-                    href={`/api/recordings/${item.id}/audio`}
+                    href={`${API_URL}/api/recordings/${item.id}/audio?client_id=${encodeURIComponent(currentClientId)}`}
                     download={`timbre-${item.id}.webm`}
                     title="Download audio file"
                     className="flex items-center gap-1 text-zinc-400 hover:text-zinc-200 transition-colors"
